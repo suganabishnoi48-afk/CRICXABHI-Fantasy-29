@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_final_perfect_key_999'
+app.secret_key = 'cricxabhi_render_fix_key_2026'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -282,50 +282,43 @@ def join_contest(contest_id):
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    if request.method == 'POST':
-        pass_input = request.form.get('admin_pass')
-        if pass_input == '29022008':
-            session['is_admin'] = True
-            return redirect(url_for('admin'))
-        elif pass_input is not None:
-            return render_template_string('''<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Login</title><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
-    <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl text-center">
-        <h2 class="text-base font-bold text-rose-400 mb-2">❌ Wrong Password!</h2>
-        <p class="text-xs text-gray-400 mb-4">Sahi password darj karein.</p>
-        <a href="/admin" class="inline-block bg-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">Try Again</a>
-    </div>
-</body>
-</html>''')
-    
-    if not session.get('is_admin'):
+    if session.get('is_admin'):
+        conn = sqlite3.connect(DB_NAME)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        
+        msg = ""
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'match':
+                c.execute('INSERT INTO matches (team1, team2, match_time, status) VALUES (?, ?, ?, "Upcoming")', (request.form.get('t1'), request.form.get('t2'), request.form.get('time')))
+                msg = "Match added successfully!"
+            elif action == 'status':
+                c.execute('UPDATE matches SET status = ? WHERE id = ?', (request.form.get('status'), request.form.get('match_id')))
+                msg = "Match status updated!"
+            elif action == 'player':
+                c.execute('INSERT INTO players (match_id, name, team, role) VALUES (?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('p_name'), request.form.get('p_team'), request.form.get('p_role')))
+                msg = "Player added successfully!"
+            elif action == 'coins':
+                target_user_id = request.form.get('user_id')
+                coin_amt = request.form.get('coins')
+                c.execute('UPDATE users SET coins = coins + ? WHERE id = ?', (coin_amt, target_user_id))
+                msg = "Coins sent successfully to user!"
+            elif action == 'contest':
+                c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots) VALUES (?, ?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('c_name'), request.form.get('prize'), request.form.get('fee'), request.form.get('spots')))
+                msg = "Contest added successfully!"
+            conn.commit()
+        
+        matches = c.execute('SELECT * FROM matches').fetchall()
+        users = c.execute('SELECT * FROM users').fetchall()
+        total_contests = c.execute('SELECT COUNT(*) FROM contests').fetchone()[0]
+        conn.close()
+        
         return render_template_string('''<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Login</title><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
-    <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
-        <h2 class="text-base font-bold text-emerald-400 mb-4 text-center">🔐 Admin Password Required</h2>
-        <form method="POST">
-            <input type="password" name="admin_pass" placeholder="Enter Password..." required class="w-full bg-gray-800 border border-gray-700 p-3 rounded-xl mb-4 text-xs text-white focus:outline-none">
-            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Login to Admin</button>
-        </form>
-        <div class="text-center mt-3"><a href="/" class="text-indigo-400 text-xs">← Back to Home</a></div>
-    </div>
-</body>
-</html>''')
-
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
+<html lang="hi">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-gray-950 text-white font-sans p-4 pb-20">
+    <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>
+    {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}
     
-    msg = ""
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'match':
-            c.execute('INSERT INTO matches (team1, team2, match_time, status) VALUES (?, ?, ?, "Upcoming")', (request.form.get('t1'), request.form.get('t2'), request.form.get('time')))
-            msg = "Match added successfully!"
-        elif action == 'status':
-            c.execute('UPDATE matches SET status = ? WHERE id = ?', (request.form.get('status'), request.form.get('match_id')))
-            msg
+    <form method="POST" class="bg-gray-900 border border-gray-80
