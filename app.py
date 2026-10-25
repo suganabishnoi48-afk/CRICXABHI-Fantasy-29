@@ -3,14 +3,13 @@ import sqlite3
 import os
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_custom_admin_secret'
+app.secret_key = 'cricxabhi_dream11_final_secret'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Tables creation
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE,
@@ -18,7 +17,7 @@ def init_db():
                         
     cursor.execute('''CREATE TABLE IF NOT EXISTS matches (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        team1 TEXT, team2 TEXT, status TEXT DEFAULT 'Upcoming')''')
+                        team1 TEXT, team2 TEXT, match_time TEXT, status TEXT DEFAULT 'Upcoming')''')
                         
     cursor.execute('''CREATE TABLE IF NOT EXISTS players (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +31,6 @@ def init_db():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         match_id INTEGER, user_id INTEGER, team_name TEXT, captain TEXT, vice_captain TEXT, players TEXT)''')
 
-    # Add default user if empty
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO users (username, coins) VALUES ('AbhiAdmin', 5000)")
@@ -78,10 +76,11 @@ def index():
             {% endif %}
             {% for match in matches %}
             <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-4 shadow">
-                <div class="flex justify-between items-center mb-3">
+                <div class="flex justify-between items-center mb-2">
                     <span class="font-bold text-lg">{{ match['team1'] }} vs {{ match['team2'] }}</span>
-                    <span class="text-xs bg-green-500 text-black px-2 py-1 rounded font-bold uppercase">{{ match['status'] }}</span>
+                    <span class="text-xs {% if match['status'] == 'Completed' %}bg-red-500{% elif match['status'] == 'Live' %}bg-yellow-500 text-black animate-pulse{% else %}bg-green-500 text-black{% endif %} px-2 py-1 rounded font-bold uppercase">{{ match['status'] }}</span>
                 </div>
+                <div class="text-xs text-gray-400 mb-3">🕒 Time: {{ match['match_time'] }}</div>
                 <a href="/match/{{ match['id'] }}" class="block text-center bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 rounded-lg transition">View Contests & Teams</a>
             </div>
             {% endfor %}
@@ -99,7 +98,19 @@ def match_detail(match_id):
     match = cursor.fetchone()
     cursor.execute("SELECT * FROM contests WHERE match_id = ?", (match_id,))
     contests = cursor.fetchall()
+    
+    # User's own teams
+    cursor.execute("SELECT * FROM teams WHERE match_id = ? AND user_id = ?", (match_id, session['user_id']))
+    my_teams = cursor.fetchall()
+    
+    # All users teams (shown only if match is Live or Completed)
+    all_teams = []
+    if match['status'] in ['Live', 'Completed']:
+        cursor.execute("SELECT teams.*, users.username FROM teams JOIN users ON teams.user_id = users.id WHERE teams.match_id = ?", (match_id,))
+        all_teams = cursor.fetchall()
+        
     conn.close()
+    
     return render_template_string('''
     <!DOCTYPE html>
     <html lang="en">
@@ -112,12 +123,52 @@ def match_detail(match_id):
     <body class="bg-gray-900 text-white font-sans pb-10">
         <div class="bg-indigo-600 p-4 flex items-center shadow-md">
             <a href="/" class="mr-3 text-xl font-bold">←</a>
-            <h1 class="text-lg font-bold">{{ match['team1'] }} vs {{ match['team2'] }} Contests</h1>
+            <h1 class="text-lg font-bold">{{ match['team1'] }} vs {{ match['team2'] }} ({{ match['status'] }})</h1>
         </div>
         <div class="max-w-md mx-auto p-4">
-            {% if not contests %}
-            <p class="text-gray-400 text-sm mb-4">Is match ke liye koi contest nahi hai. Admin panel se contest add karein!</p>
+            
+            <!-- My Created Teams Section (Always Private for user) -->
+            <div class="bg-gray-800 border border-indigo-500 rounded-xl p-4 mb-6 shadow">
+                <h3 class="font-bold text-indigo-300 mb-2">My Created Teams (🔒 Private)</h3>
+                {% if not my_teams %}
+                <p class="text-gray-400 text-xs mb-3">Aapne abhi tak koi team nahi banayi hai.</p>
+                {% else %}
+                    {% for t in my_teams %}
+                    <div class="bg-gray-900 p-3 rounded-lg mb-2 text-xs border border-gray-700">
+                        <div class="font-bold text-sm text-green-400 mb-1">{{ t['team_name'] }}</div>
+                        <div class="text-gray-300 mb-1">⭐ C: {{ t['captain'] }} | 🌟 VC: {{ t['vice_captain'] }}</div>
+                        <div class="text-gray-400">Players: {{ t['players'] }}</div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <!-- All Users Teams (Visible ONLY when match is Live or Completed) -->
+            {% if match['status'] in ['Live', 'Completed'] %}
+            <div class="bg-gray-800 border border-yellow-500 rounded-xl p-4 mb-6 shadow">
+                <h3 class="font-bold text-yellow-400 mb-2">📢 All Users Teams (🔓 Public Live)</h3>
+                {% if not all_teams %}
+                <p class="text-gray-400 text-xs">Is match mein abhi kisi ki team nahi hai.</p>
+                {% else %}
+                    {% for t in all_teams %}
+                    <div class="bg-gray-900 p-3 rounded-lg mb-2 text-xs border border-gray-700">
+                        <div class="flex justify-between font-bold text-sm text-indigo-300 mb-1">
+                            <span>{{ t['team_name'] }}</span>
+                            <span class="text-gray-400 font-normal">By: {{ t['username'] }}</span>
+                        </div>
+                        <div class="text-gray-300 mb-1">⭐ C: {{ t['captain'] }} | 🌟 VC: {{ t['vice_captain'] }}</div>
+                        <div class="text-gray-400">Players: {{ t['players'] }}</div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-6 text-center text-xs text-gray-400">
+                🔒 Sabhi users ki teams match start (Live) hone ke baad hi dikhengi!
+            </div>
             {% endif %}
+
+            <h2 class="text-md font-semibold mb-3 text-gray-300">Contests</h2>
             {% for contest in contests %}
             <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-4 shadow">
                 <div class="flex justify-between font-bold text-gray-200 mb-1">
@@ -131,7 +182,7 @@ def match_detail(match_id):
         </div>
     </body>
     </html>
-    ''', match=match, contests=contests)
+    ''', match=match, contests=contests, my_teams=my_teams, all_teams=all_teams)
 
 @app.route('/create_team/<int:match_id>/<int:contest_id>', methods=['GET', 'POST'])
 def create_team(match_id, contest_id):
@@ -149,11 +200,11 @@ def create_team(match_id, contest_id):
             return "Error: Aapko exact 11 players select karne honge! <a href='javascript:history.back()'>Go Back</a>"
             
         players_str = ",".join(selected_players)
-        cursor.execute("INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players) VALUES (?, 1, ?, ?, ?, ?)",
-                       (match_id, team_name, captain, vice_captain, players_str))
+        cursor.execute("INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players) VALUES (?, ?, ?, ?, ?, ?)",
+                       (match_id, session['user_id'], team_name, captain, vice_captain, players_str))
         conn.commit()
         conn.close()
-        return redirect(url_for('index'))
+        return redirect(url_for('match_detail', match_id=match_id))
         
     cursor.execute("SELECT * FROM players WHERE match_id = ?", (match_id,))
     players = cursor.fetchall()
@@ -180,7 +231,7 @@ def create_team(match_id, contest_id):
                 
                 <h3 class="font-bold text-indigo-400 mb-2">Pick 11 Players (C & VC select karein):</h3>
                 {% if not players %}
-                <p class="text-yellow-400 text-sm mb-4">⚠️ Is match ke liye abhi tak koi players add nahi kiye gaye hain! Admin panel se players add karein.</p>
+                <p class="text-yellow-400 text-sm mb-4">⚠️ Is match ke liye abhi tak koi players add nahi kiye gaye hain! Admin panel से players add karein.</p>
                 {% endif %}
                 <div class="space-y-2 mb-6">
                     {% for p in players %}
@@ -203,7 +254,7 @@ def create_team(match_id, contest_id):
                 <button type="submit" class="w-full bg-green-600 hover:bg-green-700 font-bold py-3 rounded-xl transition sticky bottom-4 shadow-lg">Save Team & Join Contest</button>
             </form>
             <div class="mt-4 text-center">
-                <a href="/" class="text-indigo-400 text-sm">← Back to Home</a>
+                <a href="javascript:history.back()" class="text-indigo-400 text-sm">← Back</a>
             </div>
         </div>
     </body>
@@ -223,9 +274,17 @@ def admin_panel():
         if action == 'add_match':
             t1 = request.form.get('team1')
             t2 = request.form.get('team2')
-            cursor.execute("INSERT INTO matches (team1, team2, status) VALUES (?, ?, 'Upcoming')", (t1, t2))
+            m_time = request.form.get('match_time')
+            cursor.execute("INSERT INTO matches (team1, team2, match_time, status) VALUES (?, ?, ?, 'Upcoming')", (t1, t2, m_time))
             conn.commit()
-            msg = "New match successfully added!"
+            msg = "New match with time successfully added!"
+            
+        elif action == 'update_match_status':
+            match_id = request.form.get('match_id')
+            status = request.form.get('status')
+            cursor.execute("UPDATE matches SET status = ? WHERE id = ?", (status, match_id))
+            conn.commit()
+            msg = "Match status updated successfully!"
             
         elif action == 'add_player':
             match_id = request.form.get('match_id')
@@ -235,6 +294,13 @@ def admin_panel():
             cursor.execute("INSERT INTO players (match_id, name, team, role) VALUES (?, ?, ?, ?)", (match_id, p_name, p_team, p_role))
             conn.commit()
             msg = "Player successfully added to match!"
+            
+        elif action == 'update_points':
+            p_id = request.form.get('player_id')
+            pts = request.form.get('points')
+            cursor.execute("UPDATE players SET points = ? WHERE id = ?", (pts, p_id))
+            conn.commit()
+            msg = "Player points updated successfully!"
             
         elif action == 'add_contest':
             match_id = request.form.get('match_id')
@@ -255,6 +321,8 @@ def admin_panel():
             
     cursor.execute("SELECT * FROM matches")
     matches = cursor.fetchall()
+    cursor.execute("SELECT * FROM players")
+    players = cursor.fetchall()
     cursor.execute("SELECT * FROM users")
     users = cursor.fetchall()
     conn.close()
@@ -265,7 +333,7 @@ def admin_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Admin Control Panel</title>
+        <title>Admin Control Center</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
     <body class="bg-gray-900 text-white font-sans p-4 pb-16">
@@ -279,74 +347,41 @@ def admin_panel():
             <div class="bg-green-800 p-3 rounded-lg mb-4 text-sm font-semibold shadow">{{ msg }}</div>
             {% endif %}
             
-            <!-- 1. Add Match -->
+            <!-- 1. Add Match with Time -->
             <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow">
-                <h2 class="font-bold mb-3 text-indigo-300">1. Add New Match</h2>
+                <h2 class="font-bold mb-3 text-indigo-300">1. Add New Match & Time</h2>
                 <form method="POST">
                     <input type="hidden" name="action" value="add_match">
-                    <input type="text" name="team1" placeholder="Team 1 Code (e.g. RCB)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <input type="text" name="team2" placeholder="Team 2 Code (e.g. MI)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
+                    <input type="text" name="team1" placeholder="Team 1 Code (e.g. IND)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
+                    <input type="text" name="team2" placeholder="Team 2 Code (e.g. AUS)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
+                    <input type="text" name="match_time" placeholder="Match Time (e.g. Today, 7:30 PM)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
                     <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded font-bold text-sm">Create Match</button>
                 </form>
             </div>
-            
-            <!-- 2. Add Player to Match -->
+
+            <!-- 2. Update Match Status -->
             <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow">
-                <h2 class="font-bold mb-3 text-indigo-300">2. Add Player to Match</h2>
+                <h2 class="font-bold mb-3 text-indigo-300">2. Update Match Status (Unlocks Teams)</h2>
+                <form method="POST">
+                    <input type="hidden" name="action" value="update_match_status">
+                    <select name="match_id" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
+                        <option value="">Select Match</option>
+                        {% for m in matches %}
+                        <option value="{{ m['id'] }}">{{ m['team1'] }} vs {{ m['team2'] }} (Current: {{ m['status'] }})</option>
+                        {% endfor %}
+                    </select>
+                    <select name="status" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
+                        <option value="Upcoming">Upcoming (Teams Private)</option>
+                        <option value="Live">Live (Teams Public)</option>
+                        <option value="Completed">Completed (Teams Public)</option>
+                    </select>
+                    <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-700 py-2 rounded font-bold text-sm text-black">Update Status</button>
+                </form>
+            </div>
+            
+            <!-- 3. Add Player to Match -->
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow">
+                <h2 class="font-bold mb-3 text-indigo-300">3. Add Player to Match</h2>
                 <form method="POST">
                     <input type="hidden" name="action" value="add_player">
-                    <select name="match_id" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                        <option value="">Select Match</option>
-                        {% for m in matches %}
-                        <option value="{{ m['id'] }}">{{ m['team1'] }} vs {{ m['team2'] }} (ID: {{ m['id'] }})</option>
-                        {% endfor %}
-                    </select>
-                    <input type="text" name="player_name" placeholder="Player Name (e.g. Virat Kohli)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <input type="text" name="player_team" placeholder="Team Name (e.g. RCB)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <select name="player_role" class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
-                        <option value="Batsman">Batsman</option>
-                        <option value="Bowler">Bowler</option>
-                        <option value="All-Rounder">All-Rounder</option>
-                        <option value="WK">Wicketkeeper</option>
-                    </select>
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 py-2 rounded font-bold text-sm">Add Player</button>
-                </form>
-            </div>
-            
-            <!-- 3. Add Contest -->
-            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 mb-6 shadow">
-                <h2 class="font-bold mb-3 text-indigo-300">3. Add Contest to Match</h2>
-                <form method="POST">
-                    <input type="hidden" name="action" value="add_contest">
-                    <select name="match_id" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                        <option value="">Select Match</option>
-                        {% for m in matches %}
-                        <option value="{{ m['id'] }}">{{ m['team1'] }} vs {{ m['team2'] }} (ID: {{ m['id'] }})</option>
-                        {% endfor %}
-                    </select>
-                    <input type="text" name="contest_name" placeholder="Contest Name (e.g. Mega Grand League)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <input type="number" name="prize_pool" placeholder="Prize Pool (e.g. 10000)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <input type="number" name="entry_fee" placeholder="Entry Fee (e.g. 49)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-2 text-white text-sm">
-                    <input type="number" name="spots" placeholder="Total Spots (e.g. 100)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded font-bold text-sm">Create Contest</button>
-                </form>
-            </div>
-            
-            <!-- 4. Manage Coins -->
-            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow">
-                <h2 class="font-bold mb-3 text-indigo-300">4. Give Coins to User</h2>
-                <form method="POST">
-                    <input type="hidden" name="action" value="add_coins">
-                    <input type="hidden" name="user_id" value="1">
-                    <input type="number" name="coins" placeholder="Enter coins (e.g. 5000)" required class="w-full bg-gray-900 border border-gray-700 rounded p-2 mb-3 text-white text-sm">
-                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded font-bold text-sm">Add Coins</button>
-                </form>
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', matches=matches, users=users, msg=msg)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-    
+                    <select name="match_id" required class="w-full bg-g
