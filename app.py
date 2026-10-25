@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_secure_fantasy_pro_key_999'
+app.secret_key = 'cricxabhi_final_pro_key_123'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -17,7 +17,7 @@ def init_db():
     
     c.execute('SELECT COUNT(*) FROM users WHERE username = "AbhiAdmin"')
     if c.fetchone()[0] == 0:
-        c.execute('INSERT INTO users (username, coins) VALUES ("AbhiAdmin", 100000))', )
+        c.execute('INSERT INTO users (username, coins) VALUES ("AbhiAdmin", 100000)')
     conn.commit()
     conn.close()
 
@@ -117,7 +117,6 @@ def match_detail(match_id):
     contests = c.execute('SELECT * FROM contests WHERE match_id = ?', (match_id,)).fetchall()
     my_teams = c.execute('SELECT * FROM teams WHERE match_id = ? AND user_id = ?', (match_id, user['id'])).fetchall()
     
-    # Fetch joined participants for each contest
     contest_data = []
     for con in contests:
         participants = c.execute('SELECT users.username, teams.team_name FROM contest_participants JOIN users ON contest_participants.user_id = users.id JOIN teams ON contest_participants.team_id = teams.id WHERE contest_participants.contest_id = ?', (con['id'],)).fetchall()
@@ -259,17 +258,15 @@ def join_contest(contest_id):
     contest = c.execute('SELECT * FROM contests WHERE id = ?', (contest_id,)).fetchone()
     user = c.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     
-    if user['coins'] < contest[4]: # entry_fee index 4
+    if user['coins'] < contest[4]: 
         conn.close()
-        return "Aapke paas contest join karne ke liye sifficient coins nahi hain! Admin se coins mangwayein. <a href='javascript:history.back()'>Go Back</a>"
+        return "Aapke paas contest join karne ke liye sufficient coins nahi hain! Admin se coins mangwayein. <a href='javascript:history.back()'>Go Back</a>"
     
-    # Check if already joined
     joined = c.execute('SELECT * FROM contest_participants WHERE contest_id = ? AND user_id = ?', (contest_id, user_id)).fetchone()
     if joined:
         conn.close()
         return "Aap is contest mein pehle hi join kar chuke hain! <a href='javascript:history.back()'>Go Back</a>"
     
-    # Deduct coins and join
     c.execute('UPDATE users SET coins = coins - ? WHERE id = ?', (contest[4], user_id))
     c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id) VALUES (?, ?, ?)', (contest_id, user_id, team_id))
     conn.commit()
@@ -285,7 +282,6 @@ def admin():
     user_id = session.get('user_id', 1)
     current_user = c.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     
-    # Security: Only AbhiAdmin can access admin panel
     if not current_user or current_user['username'] != 'AbhiAdmin':
         conn.close()
         return "Access Denied! Aap Admin nahi hain. <a href='/'>Home Jayein</a>"
@@ -322,4 +318,5 @@ def admin():
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Total Contests: {{total_contests}})<
+        <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Total Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>
+        {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs 
