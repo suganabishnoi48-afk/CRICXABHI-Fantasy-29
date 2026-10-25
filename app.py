@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_secure_pro_key'
+app.secret_key = 'cricxabhi_ultimate_secure_key'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -56,7 +56,7 @@ def index():
     matches = c.execute('SELECT * FROM matches').fetchall()
     conn.close()
     
-    return render_template_string('''
+    html = """
     <!DOCTYPE html>
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CRICXABHI Fantasy</title><script src="https://cdn.tailwindcss.com"></script></head>
@@ -84,7 +84,8 @@ def index():
         {% endfor %}
     </body>
     </html>
-    ''', user=user, matches=matches)
+    """
+    return render_template_string(html, user=user, matches=matches)
 
 @app.route('/match/<int:match_id>')
 def match_detail(match_id):
@@ -105,7 +106,8 @@ def match_detail(match_id):
     if match['status'] in ['Live', 'Completed']:
         all_teams = c.execute('SELECT teams.*, users.username FROM teams JOIN users ON teams.user_id = users.id WHERE teams.match_id = ?', (match_id,)).fetchall()
     conn.close()
-    return render_template_string('''
+    
+    html = """
     <!DOCTYPE html>
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Match Detail</title><script src="https://cdn.tailwindcss.com"></script></head>
@@ -170,7 +172,8 @@ def match_detail(match_id):
         {% endfor %}
     </body>
     </html>
-    ''', match=match, contest_data=contest_data, my_teams=my_teams, all_teams=all_teams, user=user)
+    """
+    return render_template_string(html, match=match, contest_data=contest_data, my_teams=my_teams, all_teams=all_teams, user=user)
 
 @app.route('/create_team/<int:match_id>', methods=['GET', 'POST'])
 def create_team(match_id):
@@ -202,7 +205,8 @@ def create_team(match_id):
         
     players = c.execute('SELECT * FROM players WHERE match_id = ?', (match_id,)).fetchall()
     conn.close()
-    return render_template_string('''
+    
+    html = """
     <!DOCTYPE html>
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Team</title><script src="https://cdn.tailwindcss.com"></script></head>
@@ -223,7 +227,8 @@ def create_team(match_id):
         </form>
     </body>
     </html>
-    ''', players=players, existing_team=existing_team, edit_id=edit_id)
+    """
+    return render_template_string(html, players=players, existing_team=existing_team, edit_id=edit_id)
 
 @app.route('/join_contest/<int:contest_id>', methods=['POST'])
 def join_contest(contest_id):
@@ -292,7 +297,7 @@ def admin():
     total_contests = c.execute('SELECT COUNT(*) FROM contests').fetchone()[0]
     conn.close()
     
-    return render_template_string('''
+    html = """
     <!DOCTYPE html>
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
@@ -311,4 +316,4 @@ def admin():
         <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="status">
             <h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Match Status</h3>
             <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}} ({{m.status}})</option>{% endfor %}</select>
-            <select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><opt
+            <select name="status" class="w-full bg-gray-800 p-2.5 
