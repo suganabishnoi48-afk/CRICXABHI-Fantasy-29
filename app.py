@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_ultimate_secure_key'
+app.secret_key = 'cricxabhi_final_safe_key_777'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -56,36 +56,7 @@ def index():
     matches = c.execute('SELECT * FROM matches').fetchall()
     conn.close()
     
-    html = """
-    <!DOCTYPE html>
-    <html lang="hi">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CRICXABHI Fantasy</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-4 rounded-2xl flex justify-between items-center shadow-lg mb-4">
-            <div><h1 class="font-bold text-base">CRICXABHI Fantasy 🏏</h1><p class="text-xs text-indigo-200">Hi, <b>{{user.username}}</b></p></div>
-            <div class="flex gap-2 items-center">
-                <span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {{user.coins}}</span>
-                {% if user.username == 'AbhiAdmin' %}
-                <a href="/admin" class="bg-emerald-500 text-black px-3 py-1 rounded-xl font-bold text-xs">Admin Panel</a>
-                {% endif %}
-            </div>
-        </div>
-        <div class="bg-gray-900 p-4 rounded-2xl mb-4 border border-gray-800">
-            <h3 class="text-xs font-semibold text-gray-300 mb-2">Login / Switch Account (0 Coins on signup)</h3>
-            <form method="POST" class="flex gap-2"><input type="text" name="username" placeholder="Enter unique name..." required class="bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs w-full text-white"><button class="bg-indigo-600 px-4 py-2.5 rounded-xl text-xs font-bold">Go</button></form>
-        </div>
-        <h2 class="text-sm font-bold mb-3 text-gray-300">Upcoming & Live Matches</h2>
-        {% for m in matches %}
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-3 shadow">
-            <div class="flex justify-between font-bold text-base mb-1"><span>{{m.team1}} vs {{m.team2}}</span><span class="text-xs {% if m.status=='Live' %}bg-amber-400 text-black animate-pulse{% elif m.status=='Completed' %}bg-rose-500 text-white{% else %}bg-emerald-400 text-black{% endif %} px-2.5 py-1 rounded-full uppercase">{{m.status}}</span></div>
-            <div class="text-xs text-amber-300 mb-3 font-mono">Status: {{m.status}} | Time: {{m.match_time}}</div>
-            <a href="/match/{{m.id}}" class="block text-center bg-indigo-600 py-2.5 rounded-xl font-bold text-xs shadow">View Contests & Teams</a>
-        </div>
-        {% endfor %}
-    </body>
-    </html>
-    """
-    return render_template_string(html, user=user, matches=matches)
+    return render_template_string('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CRICXABHI Fantasy</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-4 rounded-2xl flex justify-between items-center shadow-lg mb-4"><div><h1 class="font-bold text-base">CRICXABHI Fantasy 🏏</h1><p class="text-xs text-indigo-200">Hi, <b>{{user.username}}</b></p></div><div class="flex gap-2 items-center"><span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {{user.coins}}</span>{% if user.username == "AbhiAdmin" %}<a href="/admin" class="bg-emerald-500 text-black px-3 py-1 rounded-xl font-bold text-xs">Admin Panel</a>{% endif %}</div></div><div class="bg-gray-900 p-4 rounded-2xl mb-4 border border-gray-800"><h3 class="text-xs font-semibold text-gray-300 mb-2">Login / Switch Account (0 Coins on signup)</h3><form method="POST" class="flex gap-2"><input type="text" name="username" placeholder="Enter unique name..." required class="bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs w-full text-white"><button class="bg-indigo-600 px-4 py-2.5 rounded-xl text-xs font-bold">Go</button></form></div><h2 class="text-sm font-bold mb-3 text-gray-300">Upcoming & Live Matches</h2>{% for m in matches %}<div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-3 shadow"><div class="flex justify-between font-bold text-base mb-1"><span>{{m.team1}} vs {{m.team2}}</span><span class="text-xs {% if m.status==\'Live\' %}bg-amber-400 text-black animate-pulse{% elif m.status==\'Completed\' %}bg-rose-500 text-white{% else %}bg-emerald-400 text-black{% endif %} px-2.5 py-1 rounded-full uppercase">{{m.status}}</span></div><div class="text-xs text-amber-300 mb-3 font-mono">Time: {{m.match_time}}</div><a href="/match/{{m.id}}" class="block text-center bg-indigo-600 py-2.5 rounded-xl font-bold text-xs shadow">View Contests & Teams</a></div>{% endfor %}</body></html>', user=user, matches=matches)
 
 @app.route('/match/<int:match_id>')
 def match_detail(match_id):
@@ -107,73 +78,7 @@ def match_detail(match_id):
         all_teams = c.execute('SELECT teams.*, users.username FROM teams JOIN users ON teams.user_id = users.id WHERE teams.match_id = ?', (match_id,)).fetchall()
     conn.close()
     
-    html = """
-    <!DOCTYPE html>
-    <html lang="hi">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Match Detail</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">{{match.team1}} vs {{match.team2}}</h1></div>
-        
-        <div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4">
-            <h3 class="font-bold text-indigo-300 text-xs mb-2">🔒 My Created Teams</h3>
-            {% if not my_teams %}<p class="text-[11px] text-gray-400 mb-2">Pehle apni team banayein!</p>{% endif %}
-            {% for t in my_teams %}
-            <div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700">
-                <div class="font-bold text-emerald-400 mb-1">{{t.team_name}}</div>
-                <div class="text-gray-300 text-[11px] mb-1">⭐ C: <b>{{t.captain}}</b> | 🌟 VC: <b>{{t.vice_captain}}</b></div>
-                <div class="text-gray-400 text-[10px] mb-2">Players: {{t.players}}</div>
-                {% if match.status == 'Upcoming' %}
-                <a href="/create_team/{{match.id}}?edit={{t.id}}" class="bg-amber-500 text-black font-bold px-2.5 py-1 rounded text-[10px]">✏️ Edit Lineup</a>
-                {% endif %}
-            </div>
-            {% endfor %}
-            <a href="/create_team/{{match.id}}" class="block text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs mt-2">+ Create New Team</a>
-        </div>
-
-        {% if match.status in ['Live', 'Completed'] %}
-        <div class="bg-gray-900 border border-amber-500 p-3 rounded-2xl mb-4">
-            <h3 class="font-bold text-amber-400 text-xs mb-2">🔓 All Users Public Teams</h3>
-            {% for t in all_teams %}
-            <div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700">
-                <div class="flex justify-between font-bold mb-1"><span class="text-indigo-300">{{t.team_name}}</span><span class="text-gray-400 text-[10px]">By: {{t.username}}</span></div>
-                <div class="text-gray-300 text-[11px] mb-1">⭐ C: {{t.captain}} | 🌟 VC: {{t.vice_captain}}</div>
-                <div class="text-gray-400 text-[10px]">Players: {{t.players}}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        <h3 class="text-xs font-bold mb-2 text-gray-300">Contests & Joined Participants</h3>
-        {% for item in contest_data %}
-        <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-            <div class="flex justify-between font-bold text-xs mb-1"><span>{{item.contest.name}}</span><span class="text-emerald-400">🪙 Prize: {{item.contest.prize_pool}}</span></div>
-            <p class="text-[10px] text-gray-400 mb-2">Entry Fee: 🪙 {{item.contest.entry_fee}} | Spots: {{item.contest.spots}}</p>
-            
-            <div class="bg-gray-950 p-2 rounded-xl mb-2 text-[11px]">
-                <span class="text-amber-400 font-bold">Joined Users ({{item.participants|length}}):</span>
-                {% if not item.participants %}<span class="text-gray-500"> Abhi koi nahi juda.</span>{% endif %}
-                <ul class="list-disc pl-4 mt-1 text-gray-300">
-                    {% for p in item.participants %}
-                    <li><b>{{p.username}}</b> (Team: {{p.team_name}})</li>
-                    {% endfor %}
-                </ul>
-            </div>
-
-            <form action="/join_contest/{{item.contest.id}}" method="POST" class="flex gap-2">
-                <select name="team_id" required class="bg-gray-800 p-1.5 rounded text-xs w-full text-white border border-gray-700">
-                    <option value="">Apni Team Select Karein</option>
-                    {% for t in my_teams %}
-                    <option value="{{t.id}}">{{t.team_name}}</option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="bg-emerald-600 px-4 py-1.5 rounded font-bold text-xs shrink-0">Join (🪙 {{item.contest.entry_fee}})</button>
-            </form>
-        </div>
-        {% endfor %}
-    </body>
-    </html>
-    """
-    return render_template_string(html, match=match, contest_data=contest_data, my_teams=my_teams, all_teams=all_teams, user=user)
+    return render_template_string('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Match Detail</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">{{match.team1}} vs {{match.team2}}</h1></div><div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4"><h3 class="font-bold text-indigo-300 text-xs mb-2">🔒 My Created Teams</h3>{% if not my_teams %}<p class="text-[11px] text-gray-400 mb-2">Pehle apni team banayein!</p>{% endif %}{% for t in my_teams %}<div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700"><div class="font-bold text-emerald-400 mb-1">{{t.team_name}}</div><div class="text-gray-300 text-[11px] mb-1">⭐ C: <b>{{t.captain}}</b> | 🌟 VC: <b>{{t.vice_captain}}</b></div><div class="text-gray-400 text-[10px] mb-2">Players: {{t.players}}</div>{% if match.status == \'Upcoming\' %}<a href="/create_team/{{match.id}}?edit={{t.id}}" class="bg-amber-500 text-black font-bold px-2.5 py-1 rounded text-[10px]">✏️ Edit Lineup</a>{% endif %}</div>{% endfor %}<a href="/create_team/{{match.id}}" class="block text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs mt-2">+ Create New Team</a></div>{% if match.status in [\'Live\', \'Completed\'] %}<div class="bg-gray-900 border border-amber-500 p-3 rounded-2xl mb-4"><h3 class="font-bold text-amber-400 text-xs mb-2">🔓 All Users Public Teams</h3>{% for t in all_teams %}<div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700"><div class="flex justify-between font-bold mb-1"><span class="text-indigo-300">{{t.team_name}}</span><span class="text-gray-400 text-[10px]">By: {{t.username}}</span></div><div class="text-gray-300 text-[11px] mb-1">⭐ C: {{t.captain}} | 🌟 VC: {{t.vice_captain}}</div><div class="text-gray-400 text-[10px]">Players: {{t.players}}</div></div>{% endfor %}</div>{% endif %}<h3 class="text-xs font-bold mb-2 text-gray-300">Contests & Joined Participants</h3>{% for item in contest_data %}<div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><div class="flex justify-between font-bold text-xs mb-1"><span>{{item.contest.name}}</span><span class="text-emerald-400">🪙 Prize: {{item.contest.prize_pool}}</span></div><p class="text-[10px] text-gray-400 mb-2">Entry Fee: 🪙 {{item.contest.entry_fee}} | Spots: {{item.contest.spots}}</p><div class="bg-gray-950 p-2 rounded-xl mb-2 text-[11px]"><span class="text-amber-400 font-bold">Joined Users ({{item.participants|length}}):</span>{% if not item.participants %}<span class="text-gray-500"> Abhi koi nahi juda.</span>{% endif %}<ul class="list-disc pl-4 mt-1 text-gray-300">{% for p in item.participants %}<li><b>{{p.username}}</b> (Team: {{p.team_name}})</li>{% endfor %}</ul></div><form action="/join_contest/{{item.contest.id}}" method="POST" class="flex gap-2"><select name="team_id" required class="bg-gray-800 p-1.5 rounded text-xs w-full text-white border border-gray-700"><option value="">Apni Team Select Karein</option>{% for t in my_teams %}<option value="{{t.id}}">{{t.team_name}}</option>{% endfor %}</select><button type="submit" class="bg-emerald-600 px-4 py-1.5 rounded font-bold text-xs shrink-0">Join (🪙 {{item.contest.entry_fee}})</button></form></div>{% endfor %}</body></html>', match=match, contest_data=contest_data, my_teams=my_teams, all_teams=all_teams, user=user)
 
 @app.route('/create_team/<int:match_id>', methods=['GET', 'POST'])
 def create_team(match_id):
@@ -206,29 +111,7 @@ def create_team(match_id):
     players = c.execute('SELECT * FROM players WHERE match_id = ?', (match_id,)).fetchall()
     conn.close()
     
-    html = """
-    <!DOCTYPE html>
-    <html lang="hi">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Team</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl mb-4"><h1 class="text-sm font-bold">{% if edit_id %}Edit Lineup{% else %}Select 11 Players{% endif %}</h1></div>
-        <form method="POST">
-            <div class="mb-3"><input type="text" name="team_name" value="{% if existing_team %}{{existing_team.team_name}}{% endif %}" placeholder="Team Name" required class="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-xl text-xs text-white"></div>
-            <h3 class="text-xs font-bold text-indigo-300 mb-2">Pick 11 Players & Select C/VC:</h3>
-            <div class="space-y-2 mb-4">
-                {% for p in players %}
-                <label class="flex justify-between items-center bg-gray-900 border border-gray-800 p-2.5 rounded-xl text-xs">
-                    <div class="flex items-center gap-2"><input type="checkbox" name="players" value="{{p.name}}" {% if existing_team and p.name in existing_team.players %}checked{% endif %} class="accent-indigo-500"><div><span class="font-bold">{{p.name}}</span><span class="text-[10px] text-gray-400 block">{{p.team}} • {{p.role}}</span></div></div>
-                    <div class="flex gap-2 text-[11px]"><label><input type="radio" name="captain" value="{{p.name}}" {% if existing_team and existing_team.captain == p.name %}checked{% endif %} required> C</label><label><input type="radio" name="vice_captain" value="{{p.name}}" {% if existing_team and existing_team.vice_captain == p.name %}checked{% endif %} required> VC</label></div>
-                </label>
-                {% endfor %}
-            </div>
-            <button class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">{% if edit_id %}Update Lineup{% else %}Save Team{% endif %}</button>
-        </form>
-    </body>
-    </html>
-    """
-    return render_template_string(html, players=players, existing_team=existing_team, edit_id=edit_id)
+    return render_template_string('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Team</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-3 rounded-xl mb-4"><h1 class="text-sm font-bold">{% if edit_id %}Edit Lineup{% else %}Select 11 Players{% endif %}</h1></div><form method="POST"><div class="mb-3"><input type="text" name="team_name" value="{% if existing_team %}{{existing_team.team_name}}{% endif %}" placeholder="Team Name" required class="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-xl text-xs text-white"></div><h3 class="text-xs font-bold text-indigo-300 mb-2">Pick 11 Players & Select C/VC:</h3><div class="space-y-2 mb-4">{% for p in players %}<label class="flex justify-between items-center bg-gray-900 border border-gray-800 p-2.5 rounded-xl text-xs"><div class="flex items-center gap-2"><input type="checkbox" name="players" value="{{p.name}}" {% if existing_team and p.name in existing_team.players %}checked{% endif %} class="accent-indigo-500"><div><span class="font-bold">{{p.name}}</span><span class="text-[10px] text-gray-400 block">{{p.team}} • {{p.role}}</span></div></div><div class="flex gap-2 text-[11px]"><label><input type="radio" name="captain" value="{{p.name}}" {% if existing_team and existing_team.captain == p.name %}checked{% endif %} required> C</label><label><input type="radio" name="vice_captain" value="{{p.name}}" {% if existing_team and existing_team.vice_captain == p.name %}checked{% endif %} required> VC</label></div></label>{% endfor %}</div><button class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">{% if edit_id %}Update Lineup{% else %}Save Team{% endif %}</button></form></body></html>', players=players, existing_team=existing_team, edit_id=edit_id)
 
 @app.route('/join_contest/<int:contest_id>', methods=['POST'])
 def join_contest(contest_id):
@@ -297,23 +180,7 @@ def admin():
     total_contests = c.execute('SELECT COUNT(*) FROM contests').fetchone()[0]
     conn.close()
     
-    html = """
-    <!DOCTYPE html>
-    <html lang="hi">
-    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>
-        {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}
-        
-        <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match">
-            <h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3>
-            <input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
-            <input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
-            <input type="text" name="time" placeholder="Match Time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
-            <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button>
-        </form>
+    return render_template_string('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>{% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match"><h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3><input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="time" placeholder="Match Time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button></form><form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="status"><h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Match Status</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}} ({{m.status}})</option>{% endfor %}</select><select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Upcoming">Upcoming</option><option value="Live">Live</option><option value="Completed">Completed</option></select><button class="w-full bg-amber-500 text-black py-2.5 rounded-xl font-bold text-xs">Update Status</button></form><form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="player"><h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Add Player</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}}</option>{% endfor %}</select><input type="text" name="p_name" placeholder="Player Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="p_team" placeholder="Team Code" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><select name="p_role" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="WK">WK</option></select><button class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs">Add Player</button></form><form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="contest"><h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Add Contest</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}}</option>{% endfor %}</select><input type="text" name="c_name" placeholder="Contest Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="prize" placeholder="Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="spots" placeholder="Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button></form><form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl"><input type="hidden" name="action" value="coins"><h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Give Coins</h3><select name="user_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for u in users %}<option value="{{u.id}}">{{u.username}} (🪙 {{u.coins}})</option>{% endfor %}</select><input type="number" name="coins" placeholder="Coins amount" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-purple-600 py-2.5 rounded-xl font-bold text-xs">Send Coins</button></form></body></html>', matches=matches, users=users, msg=msg, total_contests=total_contests)
 
-        <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="status">
-            <h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Match Status</h3>
-            <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}} ({{m.status}})</option>{% endfor %}</select>
-            <select name="status" class="w-full bg-gray-800 p-2.5 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
