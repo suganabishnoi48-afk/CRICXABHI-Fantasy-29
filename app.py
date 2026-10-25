@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_final_perfect_key_999'
+app.secret_key = 'cricxabhi_absolute_final_key_2026'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -63,7 +63,10 @@ def index():
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-4 rounded-2xl flex justify-between items-center shadow-lg mb-4">
             <div><h1 class="font-bold text-base">CRICXABHI Fantasy 🏏</h1><p class="text-xs text-indigo-200">Hi, <b>{{user.username}}</b></p></div>
-            <div class="flex gap-2 items-center"><span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {{user.coins}}</span></div>
+            <div class="flex gap-2 items-center">
+                <span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {{user.coins}}</span>
+                <a href="/admin" class="bg-emerald-500 text-black px-3 py-1 rounded-xl font-bold text-xs shadow">Admin</a>
+            </div>
         </div>
         <div class="bg-gray-900 p-4 rounded-2xl mb-4 border border-gray-800">
             <h3 class="text-xs font-semibold text-gray-300 mb-2">Login / Switch Account (0 Coins on signup)</h3>
@@ -285,9 +288,25 @@ def join_contest(contest_id):
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
-    if request.method == 'POST' and request.form.get('admin_pass') == '29022008':
-        session['is_admin'] = True
-        return redirect(url_for('admin'))
+    if request.method == 'POST':
+        pass_input = request.form.get('admin_pass')
+        if pass_input == '29022008':
+            session['is_admin'] = True
+            return redirect(url_for('admin'))
+        elif pass_input is not None:
+            return render_template_string('''
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Login</title><script src="https://cdn.tailwindcss.com"></script></head>
+            <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
+                <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl text-center">
+                    <h2 class="text-base font-bold text-rose-400 mb-2">❌ Wrong Password!</h2>
+                    <p class="text-xs text-gray-400 mb-4">Sahi password darj karein.</p>
+                    <a href="/admin" class="inline-block bg-indigo-600 px-4 py-2 rounded-xl text-xs font-bold">Try Again</a>
+                </div>
+            </body>
+            </html>
+            ''')
     
     if not session.get('is_admin'):
         return render_template_string('''
@@ -300,27 +319,4 @@ def admin():
                 <form method="POST">
                     <input type="password" name="admin_pass" placeholder="Enter Password..." required class="w-full bg-gray-800 border border-gray-700 p-3 rounded-xl mb-4 text-xs text-white focus:outline-none">
                     <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Login to Admin</button>
-                </form>
-                <div class="text-center mt-3"><a href="/" class="text-indigo-400 text-xs">← Back to Home</a></div>
-            </div>
-        </body>
-        </html>
-        ''')
-
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    msg = ""
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'match':
-            c.execute('INSERT INTO matches (team1, team2, match_time, status) VALUES (?, ?, ?, "Upcoming")', (request.form.get('t1'), request.form.get('t2'), request.form.get('time')))
-            msg = "Match added successfully!"
-        elif action == 'status':
-            c.execute('UPDATE matches SET status = ? WHERE id = ?', (request.form.get('status'), request.form.get('match_id')))
-            msg = "Match status updated!"
-        elif action == 'player':
-            c.execute('INSERT INTO players (match_id, name, team, role) VALUES (?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('p_name'), request.form.get('p_team'), request.form.get('p_role')))
-            msg = "Player added successfully!"
-     
+         
