@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_final_pro_key_123'
+app.secret_key = 'cricxabhi_secure_pro_key'
 DB_NAME = 'fantasy_web.db'
 
 def init_db():
@@ -71,35 +71,14 @@ def index():
             </div>
         </div>
         <div class="bg-gray-900 p-4 rounded-2xl mb-4 border border-gray-800">
-            <h3 class="text-xs font-semibold text-gray-300 mb-2">Login / Switch Account (Naye user ko 0 coins milenge)</h3>
-            <form method="POST" class="flex gap-2"><input type="text" name="username" placeholder="Apna unique naam daalo..." required class="bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs w-full text-white"><button class="bg-indigo-600 px-4 py-2.5 rounded-xl text-xs font-bold">Go</button></form>
+            <h3 class="text-xs font-semibold text-gray-300 mb-2">Login / Switch Account (0 Coins on signup)</h3>
+            <form method="POST" class="flex gap-2"><input type="text" name="username" placeholder="Enter unique name..." required class="bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs w-full text-white"><button class="bg-indigo-600 px-4 py-2.5 rounded-xl text-xs font-bold">Go</button></form>
         </div>
         <h2 class="text-sm font-bold mb-3 text-gray-300">Upcoming & Live Matches</h2>
         {% for m in matches %}
         <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-3 shadow">
             <div class="flex justify-between font-bold text-base mb-1"><span>{{m.team1}} vs {{m.team2}}</span><span class="text-xs {% if m.status=='Live' %}bg-amber-400 text-black animate-pulse{% elif m.status=='Completed' %}bg-rose-500 text-white{% else %}bg-emerald-400 text-black{% endif %} px-2.5 py-1 rounded-full uppercase">{{m.status}}</span></div>
-            <div class="text-xs text-amber-300 mb-3 font-mono" id="timer-{{m.id}}">🕒 Timer Loading...</div>
-            <script>
-                (function() {
-                    const matchTime = new Date("{{m.match_time}}").getTime();
-                    const timerElem = document.getElementById("timer-{{m.id}}");
-                    const status = "{{m.status}}";
-                    if(status === 'Completed') { timerElem.innerHTML = "🏁 Match Completed"; return; }
-                    if(status === 'Live') { timerElem.innerHTML = "🔴 Match is LIVE NOW!"; return; }
-                    setInterval(function() {
-                        const now = new Date().getTime();
-                        const dist = matchTime - now;
-                        if (dist < 0) { timerElem.innerHTML = "🔴 Match Started / Live"; }
-                        else {
-                            const d = Math.floor(dist / (1000 * 60 * 60 * 24));
-                            const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                            const m = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
-                            const s = Math.floor((dist % (1000 * 60)) / 1000);
-                            timerElem.innerHTML = "⏳ Starts in: " + d + "d " + h + "h " + m + "m " + s + "s";
-                        }
-                    }, 1000);
-                })();
-            </script>
+            <div class="text-xs text-amber-300 mb-3 font-mono">Status: {{m.status}} | Time: {{m.match_time}}</div>
             <a href="/match/{{m.id}}" class="block text-center bg-indigo-600 py-2.5 rounded-xl font-bold text-xs shadow">View Contests & Teams</a>
         </div>
         {% endfor %}
@@ -230,7 +209,7 @@ def create_team(match_id):
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-3 rounded-xl mb-4"><h1 class="text-sm font-bold">{% if edit_id %}Edit Lineup{% else %}Select 11 Players{% endif %}</h1></div>
         <form method="POST">
-            <div class="mb-3"><input type="text" name="team_name" value="{% if existing_team %}{{existing_team.team_name}}{% endif %}" placeholder="Team Name (e.g. CricXabhi XI)" required class="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-xl text-xs text-white"></div>
+            <div class="mb-3"><input type="text" name="team_name" value="{% if existing_team %}{{existing_team.team_name}}{% endif %}" placeholder="Team Name" required class="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-xl text-xs text-white"></div>
             <h3 class="text-xs font-bold text-indigo-300 mb-2">Pick 11 Players & Select C/VC:</h3>
             <div class="space-y-2 mb-4">
                 {% for p in players %}
@@ -260,7 +239,7 @@ def join_contest(contest_id):
     
     if user['coins'] < contest[4]: 
         conn.close()
-        return "Aapke paas contest join karne ke liye sufficient coins nahi hain! Admin se coins mangwayein. <a href='javascript:history.back()'>Go Back</a>"
+        return "Aapke paas contest join karne ke liye sufficient coins nahi hain! <a href='javascript:history.back()'>Go Back</a>"
     
     joined = c.execute('SELECT * FROM contest_participants WHERE contest_id = ? AND user_id = ?', (contest_id, user_id)).fetchone()
     if joined:
@@ -318,5 +297,18 @@ def admin():
     <html lang="hi">
     <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Total Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>
-        {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs 
+        <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel (Contests: {{total_contests}})</h1><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a></div>
+        {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}
+        
+        <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match">
+            <h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3>
+            <input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+            <input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+            <input type="text" name="time" placeholder="Match Time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+            <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button>
+        </form>
+
+        <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="status">
+            <h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Match Status</h3>
+            <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}} ({{m.status}})</option>{% endfor %}</select>
+            <select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><opt
