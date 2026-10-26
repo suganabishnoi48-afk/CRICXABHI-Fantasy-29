@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_ultimate_master_key_2026'
+app.secret_key = 'cricxabhi_logout_fix_key_2026'
 DB_NAME = 'fantasy_master.db'
 
 def init_db():
@@ -22,6 +22,11 @@ def init_db():
     conn.close()
 
 init_db()
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 @app.route('/')
 def index():
@@ -393,7 +398,6 @@ def join_contest(contest_id):
     contest = c.execute('SELECT * FROM contests WHERE id = ?', (contest_id,)).fetchone()
     user = c.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     
-    # 1 entry per user per contest limit check
     joined_already = c.execute('SELECT * FROM contest_participants WHERE contest_id = ? AND user_id = ?', (contest_id, user_id)).fetchone()
     if joined_already:
         conn.close()
@@ -442,7 +446,6 @@ def admin():
             pts = float(request.form.get('points', 0))
             c.execute('UPDATE players SET points = ? WHERE match_id = ? AND name = ?', (pts, match_id, p_name))
             
-            # Recalculate all teams points for this match with C (2x) and VC (1.5x)
             teams = c.execute('SELECT * FROM teams WHERE match_id = ?', (match_id,)).fetchall()
             for t in teams:
                 plr_list = t['players'].split(',')
@@ -462,14 +465,12 @@ def admin():
         elif action == 'update_status':
             match_id = request.form.get('match_id')
             new_status = request.form.get('status')
-            c.execute('UPDATE matches SET status = ? WHERE id = ?', (match_id, new_status) if False else ('UPDATE matches SET status = ? WHERE id = ?', (new_status, match_id)))
-            # If completed, distribute winnings automatically based on ranks
+            c.execute('UPDATE matches SET status = ? WHERE id = ?', (new_status, match_id))
             if new_status == 'Completed':
                 contests = c.execute('SELECT * FROM contests WHERE match_id = ?', (match_id,)).fetchall()
                 for con in contests:
                     participants = c.execute('SELECT contest_participants.*, teams.total_points FROM contest_participants JOIN teams ON contest_participants.team_id = teams.id WHERE contest_participants.contest_id = ? ORDER BY teams.total_points DESC', (con['id'],)).fetchall()
                     
-                    # Parse breakup e.g. "500,300,200" for ranks 1, 2, 3
                     breakup = [int(x.strip()) for x in con['prize_breakup'].split(',') if x.strip().isdigit()]
                     
                     for idx, p in enumerate(participants):
@@ -493,7 +494,7 @@ def admin():
 <html lang="hi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>
 <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-    <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel</h1><div class="flex gap-2"><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a><a href="/login" class="text-rose-400 text-xs bg-rose-950 px-3 py-1 rounded-lg">Logout</a></div></div>
+    <div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel</h1><div class="flex gap-2"><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a><a href="/logout" class="text-rose-400 text-xs bg-rose-950 px-3 py-1 rounded-lg">Logout</a></div></div>
     {% if msg %}<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}
     
     <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-4">
