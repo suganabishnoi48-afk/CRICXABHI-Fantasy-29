@@ -1,12 +1,19 @@
 from flask import Flask, render_template_string, request, redirect, url_for, session
 import sqlite3
+import os
+import shutil
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_no_error_2026'
+app.secret_key = 'cricxabhi_permanent_data_2026'
 DB_NAME = 'fantasy_master.db'
+BACKUP_DB = 'backup_fantasy_master.db'
 
 def init_db():
+    # Agar main db gayab ho gaya hai par backup pada hai, toh backup se restore kar lo
+    if not os.path.exists(DB_NAME) and os.path.exists(BACKUP_DB):
+        shutil.copyfile(BACKUP_DB, DB_NAME)
+        
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, coins INTEGER DEFAULT 0)')
@@ -21,8 +28,16 @@ def init_db():
         c.execute('INSERT INTO users (username, password, coins) VALUES ("AbhiAdmin", "29022008", 100000)')
     conn.commit()
     conn.close()
+    
+    # Har baar start hone par backup save kar lo
+    if os.path.exists(DB_NAME):
+        shutil.copyfile(DB_NAME, BACKUP_DB)
 
 init_db()
+
+def save_backup():
+    if os.path.exists(DB_NAME):
+        shutil.copyfile(DB_NAME, BACKUP_DB)
 
 @app.route('/logout')
 def logout():
@@ -119,6 +134,7 @@ def register():
                 c.execute('INSERT INTO users (username, password, coins) VALUES (?, ?, 0)', (username, password))
                 conn.commit()
                 conn.close()
+                save_backup()
                 return redirect(url_for('login'))
             except sqlite3.IntegrityError:
                 error = "❌ Username already exists!"
@@ -153,6 +169,7 @@ def wallet():
                 c.execute('UPDATE users SET coins = coins - ? WHERE id = ?', (amt, user['id']))
                 c.execute('UPDATE users SET coins = coins + ? WHERE id = ?', (amt, target_user['id']))
                 conn.commit()
+                save_backup()
                 msg = f"Successfully sent {amt} coins to {target_name}!"
             else:
                 msg = "❌ Target user not found!"
@@ -243,270 +260,4 @@ def match_detail(match_id):
         if len(parts) >= con['spots']:
             page += '<div class="text-center bg-rose-900 text-rose-200 py-1.5 rounded font-bold text-xs">Contest Full ❌</div>'
         elif not is_live:
-            page += '<form action="/join_contest/' + str(con['id']) + '" method="POST" class="flex gap-2"><select name="team_id" required class="bg-gray-800 p-1.5 rounded text-xs w-full text-white border border-gray-700"><option value="">Apni Team Select Karein</option>'
-            for t in my_teams:
-                page += '<option value="' + str(t['id']) + '">' + t['team_name'] + '</option>'
-            page += '</select><button type="submit" class="bg-emerald-600 px-4 py-1.5 rounded font-bold text-xs shrink-0">Join</button></form>'
-        page += '</div>'
-    page += '</body></html>'
-    return render_template_string(page)
-
-@app.route('/show_team/<int:team_id>')
-def show_team(team_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    team = c.execute('SELECT * FROM teams WHERE id = ?', (team_id,)).fetchone()
-    if not team:
-        conn.close()
-        return "Team not found!"
-    match_id = team['match_id']
-    match = c.execute('SELECT * FROM matches WHERE id = ?', (match_id,)).fetchone()
-    
-    plr_names = [p.strip() for p in team['players'].split(',')]
-    player_points = []
-    for p_name in plr_names:
-        p_row = c.execute('SELECT * FROM players WHERE match_id = ? AND name = ?', (match_id, p_name)).fetchone()
-        pts = p_row['points'] if p_row else 0
-        role = p_row['role'] if p_row else 'Player'
-        p_team = p_row['team'] if p_row else ''
-        if p_name == team['captain']:
-            final_pts = pts * 2
-        elif p_name == team['vice_captain']:
-            final_pts = pts * 1.5
-        else:
-            final_pts = pts
-        player_points.append({'name': p_name, 'role': role, 'team': p_team, 'base_pts': pts, 'final_pts': final_pts, 'is_c': (p_name == team['captain']), 'is_vc': (p_name == team['vice_captain'])})
-    conn.close()
-    
-    page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Show Team</title><script src="https://cdn.tailwindcss.com"></script></head>'
-    page += '<body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/match/' + str(match['id']) + '" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">' + team['team_name'] + ' (Total: ' + str(team['total_points']) + ' Pts)</h1></div>'
-    page += '<div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><h3 class="text-xs font-bold text-indigo-300 mb-2">Selected 11 Players & Points:</h3><div class="space-y-2">'
-    for p in player_points:
-        badge_cv = ''
-        if p['is_c']:
-            badge_cv = '<span class="bg-amber-500 text-black font-bold px-1.5 py-0.5 rounded text-[10px] ml-1">C (2x)</span>'
-        elif p['is_vc']:
-            badge_cv = '<span class="bg-purple-500 text-white font-bold px-1.5 py-0.5 rounded text-[10px] ml-1">VC (1.5x)</span>'
-        page += '<div class="flex justify-between items-center bg-gray-800 p-2.5 rounded-xl text-xs border border-gray-700"><div><span class="font-bold">' + p['name'] + '</span>' + badge_cv + '<span class="text-[10px] text-gray-400 block">' + p['team'] + ' • ' + p['role'] + '</span></div>'
-        page += '<div class="text-right"><span class="text-emerald-400 font-bold text-sm">' + str(p['final_pts']) + ' Pts</span><span class="text-[10px] text-gray-400 block">(Base: ' + str(p['base_pts']) + ')</span></div></div>'
-    page += '</div></div></body></html>'
-    return render_template_string(page)
-
-@app.route('/create_team/<int:match_id>', methods=['GET', 'POST'])
-def create_team(match_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    match = c.execute('SELECT * FROM matches WHERE id = ?', (match_id,)).fetchone()
-    is_live = (match['status'] != 'Upcoming')
-    if match['status'] == 'Upcoming':
-        try:
-            m_time = datetime.strptime(match['match_time'], '%Y-%m-%dT%H:%M')
-            if datetime.now() >= m_time:
-                is_live = True
-        except:
-            pass
-    if is_live:
-        conn.close()
-        return "Error: Match shuru hone ke baad team create ya edit nahi ki ja sakti! <a href='/'>Go Home</a>"
-        
-    user_id = session['user_id']
-    edit_id = request.args.get('edit')
-    existing_team = None
-    if edit_id:
-        existing_team = c.execute('SELECT * FROM teams WHERE id = ? AND user_id = ?', (edit_id, user_id)).fetchone()
-
-    if request.method == 'POST':
-        t_name = request.form.get('team_name')
-        capt = request.form.get('captain')
-        v_capt = request.form.get('vice_captain')
-        plrs = request.form.getlist('players')
-        if len(plrs) != 11:
-            conn.close()
-            return "Error: Exact 11 players select karne honge! <a href='javascript:history.back()'>Go Back</a>"
-        p_str = ",".join(plrs)
-        if edit_id and existing_team:
-            c.execute('UPDATE teams SET team_name = ?, captain = ?, vice_captain = ?, players = ? WHERE id = ?', (t_name, capt, v_capt, p_str, edit_id))
-        else:
-            c.execute('INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players) VALUES (?, ?, ?, ?, ?, ?)', (match_id, user_id, t_name, capt, v_capt, p_str))
-        conn.commit()
-        conn.close()
-        return redirect(url_for('match_detail', match_id=match_id))
-        
-    players = c.execute('SELECT * FROM players WHERE match_id = ?', (match_id,)).fetchall()
-    conn.close()
-    
-    page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Team</title><script src="https://cdn.tailwindcss.com"></script></head>'
-    page += '<body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-3 rounded-xl mb-4"><h1 class="text-sm font-bold">Select Exact 11 Players & C/VC</h1></div>'
-    page += '<form method="POST"><div class="mb-3"><input type="text" name="team_name" value="' + (existing_team['team_name'] if existing_team else '') + '" placeholder="Team Name" required class="w-full bg-gray-900 border border-gray-700 p-2.5 rounded-xl text-xs text-white"></div><div class="space-y-2 mb-4">'
-    for p in players:
-        chk = 'checked' if existing_team and p['name'] in existing_team['players'] else ''
-        c_chk = 'checked' if existing_team and existing_team['captain'] == p['name'] else ''
-        vc_chk = 'checked' if existing_team and existing_team['vice_captain'] == p['name'] else ''
-        page += '<label class="flex justify-between items-center bg-gray-900 border border-gray-800 p-2.5 rounded-xl text-xs"><div class="flex items-center gap-2"><input type="checkbox" name="players" value="' + p['name'] + '" ' + chk + ' class="accent-indigo-500"><div><span class="font-bold">' + p['name'] + '</span><span class="text-[10px] text-gray-400 block">' + p['team'] + ' • ' + p['role'] + '</span></div></div>'
-        page += '<div class="flex gap-2 text-[11px]"><label><input type="radio" name="captain" value="' + p['name'] + '" ' + c_chk + ' required> C (2x)</label><label><input type="radio" name="vice_captain" value="' + p['name'] + '" ' + vc_chk + ' required> VC (1.5x)</label></div></label>'
-    page += '</div><button class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Save Team</button></form></body></html>'
-    return render_template_string(page)
-
-@app.route('/join_contest/<int:contest_id>', methods=['POST'])
-def join_contest(contest_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    user_id = session['user_id']
-    team_id = request.form.get('team_id')
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    contest = c.execute('SELECT * FROM contests WHERE id = ?', (contest_id,)).fetchone()
-    user = c.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    
-    joined_already = c.execute('SELECT * FROM contest_participants WHERE contest_id = ? AND user_id = ?', (contest_id, user_id)).fetchone()
-    if joined_already:
-        conn.close()
-        return "Error: Aap is contest mein pehle hi join kar chuke hain! <a href='javascript:history.back()'>Go Back</a>"
-        
-    participants_count = c.execute('SELECT COUNT(*) FROM contest_participants WHERE contest_id = ?', (contest_id,)).fetchone()[0]
-    if participants_count >= contest['spots']:
-        conn.close()
-        return "Error: Contest Full ❌ <a href='javascript:history.back()'>Go Back</a>"
-        
-    if user['coins'] < contest['entry_fee']:
-        conn.close()
-        return "Error: Not enough coins! <a href='javascript:history.back()'>Go Back</a>"
-        
-    c.execute('UPDATE users SET coins = coins - ? WHERE id = ?', (contest['entry_fee'], user_id))
-    c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id) VALUES (?, ?, ?)', (contest_id, user_id, team_id))
-    conn.commit()
-    match_id = contest['match_id']
-    conn.close()
-    return redirect(url_for('match_detail', match_id=match_id))
-
-@app.route('/admin', methods=['GET', 'POST'])
-def admin():
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-        
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    msg = ""
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'match':
-            c.execute('INSERT INTO matches (team1, team2, match_time, status) VALUES (?, ?, ?, "Upcoming")', (request.form.get('t1'), request.form.get('t2'), request.form.get('time')))
-            msg = "Match added successfully!"
-        elif action == 'player':
-            c.execute('INSERT INTO players (match_id, name, team, role) VALUES (?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('p_name'), request.form.get('p_team'), request.form.get('p_role')))
-            msg = "Player added successfully!"
-        elif action == 'contest':
-            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (?, ?, ?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('c_name'), request.form.get('prize'), request.form.get('fee'), request.form.get('spots'), request.form.get('breakup')))
-            msg = "Contest added successfully!"
-        elif action == 'add_coins':
-            target_uid = request.form.get('target_user_id')
-            add_amt = int(request.form.get('add_amount', 0))
-            if add_amt != 0:
-                c.execute('UPDATE users SET coins = coins + ? WHERE id = ?', (add_amt, target_uid))
-                msg = f"Successfully added {add_amt} coins to user!"
-        elif action == 'give_points':
-            match_id = request.form.get('match_id')
-            p_name = request.form.get('player_name')
-            pts = float(request.form.get('points', 0))
-            c.execute('UPDATE players SET points = ? WHERE match_id = ? AND name = ?', (pts, match_id, p_name))
-            
-            teams = c.execute('SELECT * FROM teams WHERE match_id = ?', (match_id,)).fetchall()
-            for t in teams:
-                plr_list = t['players'].split(',')
-                t_pts = 0
-                for p in plr_list:
-                    p_row = c.execute('SELECT points FROM players WHERE match_id = ? AND name = ?', (match_id, p.strip())).fetchone()
-                    p_val = p_row['points'] if p_row else 0
-                    if p.strip() == t['captain']:
-                        t_val = p_val * 2
-                    elif p.strip() == t['vice_captain']:
-                        t_val = p_val * 1.5
-                    else:
-                        t_val = p_val
-                    t_pts += t_val
-                c.execute('UPDATE teams SET total_points = ? WHERE id = ?', (t_pts, t['id']))
-            msg = f"Points updated for {p_name} and scores recalculated!"
-        elif action == 'update_status':
-            match_id = request.form.get('match_id')
-            new_status = request.form.get('status')
-            c.execute('UPDATE matches SET status = ? WHERE id = ?', (new_status, match_id))
-            if new_status == 'Completed':
-                contests = c.execute('SELECT * FROM contests WHERE match_id = ?', (match_id,)).fetchall()
-                for con in contests:
-                    participants = c.execute('SELECT contest_participants.*, teams.total_points FROM contest_participants JOIN teams ON contest_participants.team_id = teams.id WHERE contest_participants.contest_id = ? ORDER BY teams.total_points DESC', (con['id'],)).fetchall()
-                    breakup_map = {}
-                    parts = con['prize_breakup'].split(',')
-                    for part in parts:
-                        if ':' in part:
-                            rng, amt = part.split(':')
-                            amt = int(amt.strip())
-                            rng = rng.strip()
-                            if '-' in rng:
-                                start_r, end_r = map(int, rng.split('-'))
-                                for r in range(start_r, end_r + 1):
-                                    breakup_map[r] = amt
-                            else:
-                                breakup_map[int(rng)] = amt
-
-                    for idx, p in enumerate(participants):
-                        rank = idx + 1
-                        winnings = breakup_map.get(rank, 0)
-                        c.execute('UPDATE contest_participants SET rank = ?, winnings = ? WHERE id = ?', (rank, winnings, p['id']))
-                        if winnings > 0:
-                            c.execute('UPDATE users SET coins = coins + ? WHERE id = ?', (winnings, p['user_id']))
-            msg = "Match status updated and winnings distributed!"
-        conn.commit()
-        
-    matches = c.execute('SELECT * FROM matches').fetchall()
-    users = c.execute('SELECT * FROM users').fetchall()
-    players = c.execute('SELECT * FROM players').fetchall()
-    conn.close()
-    
-    page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Panel</title><script src="https://cdn.tailwindcss.com"></script></head>'
-    page += '<body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="flex justify-between items-center mb-4"><h1 class="text-sm font-bold text-emerald-400">👑 Admin Panel</h1><div class="flex gap-2"><a href="/" class="text-indigo-400 text-xs bg-indigo-950 px-3 py-1 rounded-lg">Home</a><a href="/logout" class="text-rose-400 text-xs bg-rose-950 px-3 py-1 rounded-lg">Logout</a></div></div>'
-    if msg:
-        page += '<div class="bg-emerald-900 text-emerald-200 p-2.5 rounded-xl mb-3 text-xs font-bold">' + msg + '</div>'
-    page += '<div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-4"><h3 class="font-bold text-indigo-300 text-xs mb-2">👥 Registered Users & Live Coin Balances</h3><div class="space-y-2 max-h-56 overflow-y-auto text-xs">'
-    for u in users:
-        page += '<div class="flex justify-between items-center bg-gray-800 p-2 rounded"><div><b>' + u['username'] + '</b> <span class="text-amber-400 font-bold ml-2">🪙 ' + str(u['coins']) + '</span></div>'
-        page += '<form method="POST" class="flex gap-1"><input type="hidden" name="action" value="add_coins"><input type="hidden" name="target_user_id" value="' + str(u['id']) + '"><input type="number" name="add_amount" placeholder="+ Coins" required class="bg-gray-900 border border-gray-700 p-1 rounded text-[10px] w-16 text-white"><button type="submit" class="bg-emerald-600 px-2 py-1 rounded font-bold text-[10px]">+</button></form></div>'
-    page += '</div></div>'
-
-    page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match"><h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3><input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="datetime-local" name="time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button></form>'
-
-    page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="player"><h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Add Player</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-    for m in matches:
-        page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
-    page += '</select><input type="text" name="p_name" placeholder="Player Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="p_team" placeholder="Team Code" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><select name="p_role" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="WK">WK</option></select><button class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs">Add Player</button></form>'
-
-    page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="contest"><h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Create Contest & Serial Prize Breakup</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-    for m in matches:
-        page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
-    page += '</select><input type="text" name="c_name" placeholder="Contest Name (e.g. Mega Contest)" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="breakup" placeholder="Breakup e.g. 1-5: 200, 6-29: 50" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button></form>'
-
-    page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="give_points"><h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Give Points to Players</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-    for m in matches:
-        page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
-    page += '</select><select name="player_name" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-    for p in players:
-        page += '<option value="' + p['name'] + '">' + p['name'] + ' (Match ' + str(p['match_id']) + ')</option>'
-    page += '</select><input type="number" step="0.5" name="points" placeholder="Points" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-purple-600 py-2.5 rounded-xl font-bold text-xs">Update Points</button></form>'
-
-    page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl"><input type="hidden" name="action" value="update_status"><h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Match Status Control</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-    for m in matches:
-        page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + ' (Current: ' + m['status'] + ')</option>'
-    page += '</select><select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Upcoming">Upcoming</option><option value="Live">Live</option><option value="Completed">Completed (Auto Payout)</option></select><button class="w-full bg-amber-500 text-black py-2.5 rounded-xl font-bold text-xs">Update Status</button></form>'
-    page += '</body></html>'
-    return render_template_string(page)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+            page += '<form action="/join_contest/' + str(con['id']) + '" method="POST" class="flex gap-2"><select name="team_id" required class
