@@ -2,7 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import sqlite3
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_logout_fix_key_2026'
+app.secret_key = 'cricxabhi_admin_coins_fix_2026'
 DB_NAME = 'fantasy_master.db'
 
 def init_db():
@@ -440,6 +440,12 @@ def admin():
         elif action == 'contest':
             c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (?, ?, ?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('c_name'), request.form.get('prize'), request.form.get('fee'), request.form.get('spots'), request.form.get('breakup')))
             msg = "Contest added successfully!"
+        elif action == 'add_coins':
+            target_uid = request.form.get('target_user_id')
+            add_amt = int(request.form.get('add_amount', 0))
+            if add_amt != 0:
+                c.execute('UPDATE users SET coins = coins + ? WHERE id = ?', (add_amt, target_uid))
+                msg = f"Successfully added {add_amt} coins to user!"
         elif action == 'give_points':
             match_id = request.form.get('match_id')
             p_name = request.form.get('player_name')
@@ -499,9 +505,17 @@ def admin():
     
     <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-4">
         <h3 class="font-bold text-indigo-300 text-xs mb-2">👥 Registered Users & Live Coin Balances</h3>
-        <div class="space-y-1 max-h-40 overflow-y-auto text-xs">
+        <div class="space-y-2 max-h-56 overflow-y-auto text-xs">
             {% for u in users %}
-            <div class="flex justify-between bg-gray-800 p-2 rounded"><span>{{u.username}}</span><span class="text-amber-400 font-bold">🪙 {{u.coins}} coins</span></div>
+            <div class="flex justify-between items-center bg-gray-800 p-2 rounded">
+                <div><b>{{u.username}}</b> <span class="text-amber-400 font-bold ml-2">🪙 {{u.coins}}</span></div>
+                <form method="POST" class="flex gap-1">
+                    <input type="hidden" name="action" value="add_coins">
+                    <input type="hidden" name="target_user_id" value="{{u.id}}">
+                    <input type="number" name="add_amount" placeholder="+ Coins" required class="bg-gray-900 border border-gray-700 p-1 rounded text-[10px] w-16 text-white">
+                    <button type="submit" class="bg-emerald-600 px-2 py-1 rounded font-bold text-[10px]">+</button>
+                </form>
+            </div>
             {% endfor %}
         </div>
     </div>
