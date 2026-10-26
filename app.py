@@ -1,8 +1,9 @@
 from flask import Flask, render_template_string, request, redirect, url_for, session
 import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'cricxabhi_admin_coins_fix_2026'
+app.secret_key = 'cricxabhi_final_perfect_2026'
 DB_NAME = 'fantasy_master.db'
 
 def init_db():
@@ -223,12 +224,12 @@ def wallet():
 <html lang="hi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Share Coin</title><script src="https://cdn.tailwindcss.com"></script></head>
 <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-    <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">🪙 Share Coin (Peer-to-Peer Transfer)</h1></div>
+    <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">🪙 Share Coin (To Users or Admin)</h1></div>
     <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-4">
         <p class="text-xs text-gray-300 mb-2">My Balance: <b>🪙 {{user.coins}} coins</b></p>
         {% if msg %}<div class="bg-indigo-950 text-indigo-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{{msg}}</div>{% endif %}
         <form method="POST" class="space-y-3">
-            <input type="text" name="target_username" placeholder="Recipient Unique Username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+            <input type="text" name="target_username" placeholder="Recipient Username (e.g. AbhiAdmin or user)..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
             <input type="number" name="amount" placeholder="Coin Amount..." min="1" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
             <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Transfer Coins</button>
         </form>
@@ -277,7 +278,9 @@ def match_detail(match_id):
             {% endif %}
         </div>
         {% endfor %}
+        {% if match.status == 'Upcoming' %}
         <a href="/create_team/{{match.id}}" class="block text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs mt-2">+ Create New Team</a>
+        {% endif %}
     </div>
 
     {% if match.status in ['Live', 'Completed'] %}
@@ -298,7 +301,7 @@ def match_detail(match_id):
     <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
         <div class="flex justify-between font-bold text-xs mb-1"><span>{{item.contest.name}}</span><span class="text-emerald-400">🪙 Prize: {{item.contest.prize_pool}}</span></div>
         <p class="text-[10px] text-gray-400 mb-1">Entry Fee: 🪙 {{item.contest.entry_fee}} | Spots: {{item.participants|length}}/{{item.contest.spots}}</p>
-        <p class="text-[10px] text-amber-300 mb-2">🎁 Prize Breakup: {{item.contest.prize_breakup}} (Last ranks: 0)</p>
+        <p class="text-[10px] text-amber-300 mb-2">🎁 Prize Breakup: {{item.contest.prize_breakup}}</p>
         
         <div class="bg-gray-950 p-2 rounded-xl mb-2 text-[11px]">
             <span class="text-indigo-400 font-bold">Joined Users & Winnings:</span>
@@ -334,6 +337,11 @@ def create_team(match_id):
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
+    match = c.execute('SELECT * FROM matches WHERE id = ?', (match_id,)).fetchone()
+    if match['status'] != 'Upcoming':
+        conn.close()
+        return "Error: Match shuru hone ke baad team create ya edit nahi ki ja sakti! <a href='/'>Go Home</a>"
+        
     user_id = session['user_id']
     edit_id = request.args.get('edit')
     existing_team = None
@@ -412,6 +420,7 @@ def join_contest(contest_id):
         conn.close()
         return "Error: Not enough coins! <a href='javascript:history.back()'>Go Back</a>"
         
+    # Instant coin deduction on joining
     c.execute('UPDATE users SET coins = coins - ? WHERE id = ?', (contest['entry_fee'], user_id))
     c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id) VALUES (?, ?, ?)', (contest_id, user_id, team_id))
     conn.commit()
@@ -438,6 +447,7 @@ def admin():
             c.execute('INSERT INTO players (match_id, name, team, role) VALUES (?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('p_name'), request.form.get('p_team'), request.form.get('p_role')))
             msg = "Player added successfully!"
         elif action == 'contest':
+            # Prize breakup format e.g. "1-5: 100, 6-29: 50"
             c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (?, ?, ?, ?, ?, ?)', (request.form.get('match_id'), request.form.get('c_name'), request.form.get('prize'), request.form.get('fee'), request.form.get('spots'), request.form.get('breakup')))
             msg = "Contest added successfully!"
         elif action == 'add_coins':
@@ -477,13 +487,24 @@ def admin():
                 for con in contests:
                     participants = c.execute('SELECT contest_participants.*, teams.total_points FROM contest_participants JOIN teams ON contest_participants.team_id = teams.id WHERE contest_participants.contest_id = ? ORDER BY teams.total_points DESC', (con['id'],)).fetchall()
                     
-                    breakup = [int(x.strip()) for x in con['prize_breakup'].split(',') if x.strip().isdigit()]
-                    
+                    # Parse breakup like "1-5: 200, 6-29: 50"
+                    breakup_map = {}
+                    parts = con['prize_breakup'].split(',')
+                    for part in parts:
+                        if ':' in part:
+                            rng, amt = part.split(':')
+                            amt = int(amt.strip())
+                            rng = rng.strip()
+                            if '-' in rng:
+                                start_r, end_r = map(int, rng.split('-'))
+                                for r in range(start_r, end_r + 1):
+                                    breakup_map[r] = amt
+                            else:
+                                breakup_map[int(rng)] = amt
+
                     for idx, p in enumerate(participants):
                         rank = idx + 1
-                        winnings = 0
-                        if idx < len(breakup):
-                            winnings = breakup[idx]
+                        winnings = breakup_map.get(rank, 0)
                         
                         c.execute('UPDATE contest_participants SET rank = ?, winnings = ? WHERE id = ?', (rank, winnings, p['id']))
                         if winnings > 0:
@@ -538,13 +559,13 @@ def admin():
     </form>
 
     <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="contest">
-        <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Create Contest & Prize Breakup</h3>
+        <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Create Contest & Serial Prize Breakup</h3>
         <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">{% for m in matches %}<option value="{{m.id}}">{{m.team1}} vs {{m.team2}}</option>{% endfor %}</select>
         <input type="text" name="c_name" placeholder="Contest Name (e.g. Mega Contest)" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         <input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         <input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         <input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
-        <input type="text" name="breakup" placeholder="Prize Breakup e.g. 500,300,200 (Rank 1,2,3)" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+        <input type="text" name="breakup" placeholder="Breakup e.g. 1-5: 200, 6-29: 50" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button>
     </form>
 
