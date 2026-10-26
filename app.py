@@ -70,7 +70,7 @@ def init_db():
                     winnings INTEGER DEFAULT 0
                 )''')
     
-    c.execute('SELECT COUNT(*) FROM users WHERE username = %s', ('AbhiAdmin',))
+    c.execute('SELECT COUNT(*) AS count FROM users WHERE username = %s', ('AbhiAdmin',))
     if c.fetchone()['count'] == 0:
         c.execute('INSERT INTO users (username, password, coins) VALUES (%s, %s, %s)', ('AbhiAdmin', '29022008', 100000))
     conn.commit()
@@ -83,7 +83,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -97,8 +97,41 @@ def index():
         conn.close()
         return redirect(url_for('login'))
         
+    # Admin actions handling
+    if session.get('is_admin') and request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'match':
+            t1 = request.form.get('t1')
+            t2 = request.form.get('t2')
+            time = request.form.get('time')
+            c.execute('INSERT INTO matches (team1, team2, match_time, status) VALUES (%s, %s, %s, %s)', (t1, t2, time, 'Upcoming'))
+            conn.commit()
+        elif action == 'player':
+            match_id = request.form.get('match_id')
+            p_name = request.form.get('p_name')
+            p_team = request.form.get('p_team')
+            p_role = request.form.get('p_role')
+            c.execute('INSERT INTO players (match_id, name, team, role, points) VALUES (%s, %s, %s, %s, %s)', (match_id, p_name, p_team, p_role, 0.0))
+            conn.commit()
+        elif action == 'contest':
+            match_id = request.form.get('match_id')
+            c_name = request.form.get('c_name')
+            prize = request.form.get('prize')
+            fee = request.form.get('fee')
+            spots = request.form.get('spots')
+            breakup = request.form.get('breakup')
+            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', (match_id, c_name, prize, fee, spots, breakup))
+            conn.commit()
+        elif action == 'update_status':
+            match_id = request.form.get('match_id')
+            status = request.form.get('status')
+            c.execute('UPDATE matches SET status = %s WHERE id = %s', (status, match_id))
+            conn.commit()
+
     c.execute('SELECT * FROM matches')
     matches = c.fetchall()
+    c.execute('SELECT * FROM players')
+    players = c.fetchall()
     conn.close()
     
     page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CRICXABHI Fantasy</title><script src="https://cdn.tailwindcss.com"></script></head>'
@@ -118,6 +151,33 @@ def index():
         page += '<div class="text-xs text-amber-300 mb-3 font-mono" id="timer-' + str(m['id']) + '">🕒 Timer Loading...</div>'
         page += '<script>(function() { const matchTime = new Date("' + str(m['match_time']) + '").getTime(); const timerElem = document.getElementById("timer-' + str(m['id']) + '"); const status = "' + m['status'] + '"; if(status === "Completed") { timerElem.innerHTML = "🏁 Match Completed"; return; } if(status === "Live") { timerElem.innerHTML = "🔴 Match is LIVE NOW!"; return; } const x = setInterval(function() { const now = new Date().getTime(); const dist = matchTime - now; if (dist < 0) { clearInterval(x); timerElem.innerHTML = "🔴 Match Started / Live"; } else { const d = Math.floor(dist / (1000 * 60 * 60 * 24)); const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)); const mi = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60)); const s = Math.floor((dist % (1000 * 60)) / 1000); timerElem.innerHTML = "⏳ Starts in: " + d + "d " + h + "h " + mi + "m " + s + "s"; } }, 1000); })();</script>'
         page += '<a href="/match/' + str(m['id']) + '" class="block text-center bg-indigo-600 py-2.5 rounded-xl font-bold text-xs shadow">View Contests & Teams</a></div>'
+    
+    if session.get('is_admin'):
+        page += '<div class="mt-6 border-t border-gray-800 pt-4">'
+        page += '<h2 class="text-lg font-bold text-amber-400 mb-3">Admin Panel</h2>'
+        
+        # 1. Add Match
+        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match"><h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3><input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="datetime-local" name="time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button></form>'
+        
+        # 2. Add Player
+        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="player"><h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Add Player</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
+        for m in matches:
+            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
+        page += '</select><input type="text" name="p_name" placeholder="Player Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="p_team" placeholder="Team Code" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><select name="p_role" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="WK">WK</option></select><button class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs">Add Player</button></form>'
+        
+        # 3. Create Contest
+        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="contest"><h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Create Contest</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
+        for m in matches:
+            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
+        page += '</select><input type="text" name="c_name" placeholder="Contest Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="breakup" placeholder="Breakup e.g. 1-5: 200" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button></form>'
+        
+        # 5. Status Control
+        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl"><input type="hidden" name="action" value="update_status"><h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Match Status Control</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
+        for m in matches:
+            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + ' (Current: ' + m['status'] + ')</option>'
+        page += '</select><select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Upcoming">Upcoming</option><option value="Live">Live</option><option value="Completed">Completed</option></select><button class="w-full bg-amber-500 text-black py-2.5 rounded-xl font-bold text-xs">Update Status</button></form>'
+        page += '</div>'
+
     page += '</body></html>'
     return render_template_string(page)
 
@@ -133,6 +193,8 @@ def login():
         if login_type == 'admin':
             if username == 'AbhiAdmin' and password == '29022008':
                 session['is_admin'] = True
+                session['user_id'] = 1
+                session['username'] = 'AbhiAdmin'
                 conn.close()
                 return redirect(url_for('index'))
             else:
@@ -143,6 +205,7 @@ def login():
             if user:
                 session['user_id'] = user['id']
                 session['username'] = user['username']
+                session.pop('is_admin', None)
                 conn.close()
                 return redirect(url_for('index'))
             else:
@@ -182,7 +245,7 @@ def register():
     
     page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Register</title><script src="https://cdn.tailwindcss.com"></script></head>'
     page += '<body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen"><div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">'
-    page += '<h2 class="text-base font-bold text-emerald-400 mb-2 text-center">📝 New User Registration</h2><p class="text-[11px] text-gray-400 mb-4 text-center">Signup bonus: <b>0 Coins</b></p>'
+    page += '<h2 class="text-base font-bold text-emerald-400 mb-2 text-center">📝 New User Registration</h2>'
     if error:
         page += '<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">' + error + '</div>'
     page += '<form method="POST" class="space-y-3"><input type="text" name="username" placeholder="Choose unique username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">'
@@ -224,11 +287,4 @@ def wallet():
     page += '<div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-4"><p class="text-xs text-gray-300 mb-2">My Balance: <b>🪙 ' + str(user['coins']) + ' coins</b></p>'
     if msg:
         page += '<div class="bg-indigo-950 text-indigo-200 p-2.5 rounded-xl mb-3 text-xs font-bold">' + msg + '</div>'
-    page += '<form method="POST" class="space-y-3"><input type="text" name="target_username" placeholder="Recipient Username (e.g. AbhiAdmin)..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">'
-    page += '<input type="number" name="amount" placeholder="Coin Amount..." min="1" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">'
-    page += '<button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Transfer Coins</button></form></div></body></html>'
-    return render_template_string(page)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-    
+    page += '<form method="POST" class="space-y-3"><input type="text" name="target_username" placeholder="Rec
