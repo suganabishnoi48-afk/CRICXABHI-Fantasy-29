@@ -10,10 +10,10 @@ app.secret_key = 'cricxabhi_fixed_2026'
 def get_db_connection():
     conn = psycopg2.connect(
         dbname="postgres",
-        user="postgres",
+        user="postgres.yhbrlylvimbjazdirqiq",
         password="@Abhishek.2929",
-        host="db.yhbrlylvimbjazdirqiq.supabase.co",
-        port="5432",
+        host="aws-0-ap-northeast-1.pooler.supabase.com",
+        port="6543",
         cursor_factory=psycopg2.extras.RealDictCursor
     )
     return conn
@@ -355,4 +355,3 @@ def match_detail(match_id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-    
