@@ -97,7 +97,6 @@ def index():
         conn.close()
         return redirect(url_for('login'))
         
-    # Admin actions handling
     if session.get('is_admin') and request.method == 'POST':
         action = request.form.get('action')
         if action == 'match':
@@ -155,27 +154,7 @@ def index():
     if session.get('is_admin'):
         page += '<div class="mt-6 border-t border-gray-800 pt-4">'
         page += '<h2 class="text-lg font-bold text-amber-400 mb-3">Admin Panel</h2>'
-        
-        # 1. Add Match
         page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="match"><h3 class="font-bold mb-2 text-indigo-300 text-xs">1. Add Match</h3><input type="text" name="t1" placeholder="Team 1" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="t2" placeholder="Team 2" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="datetime-local" name="time" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button></form>'
-        
-        # 2. Add Player
-        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="player"><h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Add Player</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-        for m in matches:
-            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
-        page += '</select><input type="text" name="p_name" placeholder="Player Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="p_team" placeholder="Team Code" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><select name="p_role" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="WK">WK</option></select><button class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs">Add Player</button></form>'
-        
-        # 3. Create Contest
-        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3"><input type="hidden" name="action" value="contest"><h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Create Contest</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-        for m in matches:
-            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + '</option>'
-        page += '</select><input type="text" name="c_name" placeholder="Contest Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><input type="text" name="breakup" placeholder="Breakup e.g. 1-5: 200" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button></form>'
-        
-        # 5. Status Control
-        page += '<form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl"><input type="hidden" name="action" value="update_status"><h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Match Status Control</h3><select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">'
-        for m in matches:
-            page += '<option value="' + str(m['id']) + '">' + m['team1'] + ' vs ' + m['team2'] + ' (Current: ' + m['status'] + ')</option>'
-        page += '</select><select name="status" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white"><option value="Upcoming">Upcoming</option><option value="Live">Live</option><option value="Completed">Completed</option></select><button class="w-full bg-amber-500 text-black py-2.5 rounded-xl font-bold text-xs">Update Status</button></form>'
         page += '</div>'
 
     page += '</body></html>'
@@ -287,4 +266,28 @@ def wallet():
     page += '<div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-4"><p class="text-xs text-gray-300 mb-2">My Balance: <b>🪙 ' + str(user['coins']) + ' coins</b></p>'
     if msg:
         page += '<div class="bg-indigo-950 text-indigo-200 p-2.5 rounded-xl mb-3 text-xs font-bold">' + msg + '</div>'
-    page += '<form method="POST" class="space-y-3"><input type="text" name="target_username" placeholder="Rec
+    page += '<form method="POST" class="space-y-3"><input type="text" name="target_username" placeholder="Recipient Username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">'
+    page += '<input type="number" name="amount" placeholder="Coin Amount..." min="1" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">'
+    page += '<button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Transfer Coins</button></form></div></body></html>'
+    return render_template_string(page)
+
+@app.route('/match/<int:match_id>')
+def match_detail(match_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+    user = c.fetchone()
+    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
+    match = c.fetchone()
+    conn.close()
+    
+    page = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Match Detail</title><script src="https://cdn.tailwindcss.com"></script></head>'
+    page += '<body class="bg-gray-950 text-white font-sans p-4 pb-20"><div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow"><a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a><h1 class="text-sm font-bold">' + match['team1'] + ' vs ' + match['team2'] + '</h1></div>'
+    page += '<a href="/" class="block text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs mt-2">Back to Home</a></div></body></html>'
+    return render_template_string(page)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+    
