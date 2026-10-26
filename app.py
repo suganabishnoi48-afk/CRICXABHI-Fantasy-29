@@ -3,26 +3,20 @@ import os
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
-from urllib.parse import urlparse
 
 app = Flask(__name__)
 app.secret_key = 'cricxabhi_fixed_2026'
 
 def get_db_connection():
-    database_url = os.environ.get('DATABASE_URL')
-    if database_url:
-        url = urlparse(database_url)
-        conn = psycopg2.connect(
-            database=url.path[1:],
-            user=url.username,
-            password=url.password,
-            host=url.hostname,
-            port=url.port,
-            cursor_factory=psycopg2.extras.RealDictCursor
-        )
-        return conn
-    else:
-        raise Exception("DATABASE_URL environment variable is not set!")
+    conn = psycopg2.connect(
+        dbname="postgres",
+        user="postgres",
+        password="@Abhishek.2929",
+        host="db.yhbrlylvimbjazdirqiq.supabase.co",
+        port="5432",
+        cursor_factory=psycopg2.extras.RealDictCursor
+    )
+    return conn
 
 def init_db():
     conn = get_db_connection()
@@ -140,7 +134,7 @@ def login():
             if username == 'AbhiAdmin' and password == '29022008':
                 session['is_admin'] = True
                 conn.close()
-                return redirect(url_for('index')) # या आपका एडमिन राउट
+                return redirect(url_for('index'))
             else:
                 error = "❌ Invalid Admin Credentials!"
         else:
@@ -237,4 +231,4 @@ def wallet():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-        
+    
