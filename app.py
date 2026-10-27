@@ -71,6 +71,11 @@ def init_db():
                     winnings INTEGER DEFAULT 0
                 )''')
     
+    try:
+        c.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS is_lineup INTEGER DEFAULT 0;')
+    except Exception:
+        conn.rollback()
+
     c.execute('SELECT COUNT(*) AS count FROM users WHERE username = %s', ('AbhiAdmin',))
     if c.fetchone()['count'] == 0:
         c.execute('INSERT INTO users (username, password, coins) VALUES (%s, %s, %s)', ('AbhiAdmin', '29022008', 100000))
@@ -164,7 +169,7 @@ def index():
     matches = c.fetchall()
     conn.close()
     
-    html = """
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -177,10 +182,10 @@ def index():
         <div class="bg-indigo-600 p-4 rounded-2xl flex justify-between items-center shadow-lg mb-4">
             <div>
                 <h1 class="font-bold text-base">CRICXABHI Fantasy 🏏</h1>
-                <p class="text-xs text-indigo-200">Hi, <b>""" + user['username'] + """</b></p>
+                <p class="text-xs text-indigo-200">Hi, <b>{user['username']}</b></p>
             </div>
             <div class="flex gap-2 items-center">
-                <span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 """ + str(user['coins']) + """</span>
+                <span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {user['coins']}</span>
                 <a href="/wallet" class="bg-amber-500 text-black px-2.5 py-1 rounded-xl font-bold text-xs">Share Coin</a>
                 <a href="/logout" class="bg-rose-600 px-2.5 py-1 rounded-xl font-bold text-xs">Logout</a>
             </div>
@@ -221,7 +226,6 @@ def index():
                 <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button>
             </form>
             
-            <!-- Matches Section with Live, Upcoming, Completed -->
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <h3 class="font-bold mb-2 text-amber-300 text-xs">2. Matches Management (Live / Upcoming / Completed)</h3>
                 
@@ -280,9 +284,8 @@ def index():
                 </div>
             </div>
             
-            <!-- 3. Add Players (Bulk Table Redirect) -->
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Add Players (Bulk Table)</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Add Players (Bulk Table - Add anytime 4-5 or more)</h3>
                 <form action="/admin/add_players_page" method="GET" class="space-y-2">
                     <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
         """
@@ -294,7 +297,6 @@ def index():
                 </form>
             </div>
 
-            <!-- 4. Update Player Points (Bulk Table Redirect) -->
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Update Player Points (Bulk Table)</h3>
                 <form action="/admin/update_points_page" method="GET" class="space-y-2">
@@ -368,11 +370,10 @@ def add_players_page():
     c = conn.cursor()
     
     if request.method == 'POST':
-        # Process bulk players
         names = request.form.getlist('name')
         teams = request.form.getlist('team')
         roles = request.form.getlist('role')
-        lineups = request.form.getlist('lineup') # indices of selected lineups
+        lineups = request.form.getlist('lineup')
         
         for i in range(len(names)):
             p_name = names[i].strip()
@@ -384,13 +385,12 @@ def add_players_page():
                           (match_id, p_name, p_team, p_role, is_lin))
         conn.commit()
         conn.close()
-        return redirect(url_for('index'))
+        return redirect(url_for('admin_match_detail', match_id=match_id))
         
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
     match = c.fetchone()
     conn.close()
     
-    # Generate 50 rows table
     rows_html = ""
     for i in range(1, 51):
         rows_html += f"""
@@ -406,7 +406,7 @@ def add_players_page():
                     <option value="WK">WK</option>
                 </select>
             </td>
-            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{i-1}" class="w-4 h-4 accent-emerald-500" title="Select if playing (Lineup)"></td>
+            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{i-1}" class="w-4 h-4 accent-emerald-500"></td>
         </tr>
         """
         
@@ -421,7 +421,7 @@ def add_players_page():
     </head>
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <a href="/admin/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
             <h1 class="text-sm font-bold">Add Players Table: {match['team1']} vs {match['team2']}</h1>
         </div>
         <form method="POST">
@@ -461,7 +461,7 @@ def update_points_page():
     if request.method == 'POST':
         p_ids = request.form.getlist('player_id')
         points_list = request.form.getlist('points')
-        lineups = request.form.getlist('lineup') # indices
+        lineups = request.form.getlist('lineup')
         
         for i in range(len(p_ids)):
             pid = p_ids[i]
@@ -470,7 +470,7 @@ def update_points_page():
             c.execute('UPDATE players SET points = %s, is_lineup = %s WHERE id = %s', (pt, is_lin, pid))
         conn.commit()
         conn.close()
-        return redirect(url_for('index'))
+        return redirect(url_for('admin_match_detail', match_id=match_id))
         
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
     match = c.fetchone()
@@ -504,7 +504,7 @@ def update_points_page():
     </head>
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <a href="/admin/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
             <h1 class="text-sm font-bold">Update Points & Lineup: {match['team1']} vs {match['team2']}</h1>
         </div>
         <form method="POST">
@@ -532,13 +532,24 @@ def update_points_page():
     """
     return render_template_string(html)
 
-@app.route('/admin/match/<int:match_id>')
+@app.route('/admin/match/<int:match_id>', methods=['GET', 'POST'])
 def admin_match_detail(match_id):
     if not session.get('is_admin'):
         return redirect(url_for('login'))
     
     conn = get_db_connection()
     c = conn.cursor()
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'edit_player':
+            pid = request.form.get('player_id')
+            p_name = request.form.get('name').strip()
+            p_team = request.form.get('team').strip()
+            p_role = request.form.get('role')
+            c.execute('UPDATE players SET name = %s, team = %s, role = %s WHERE id = %s', (p_name, p_team, p_role, pid))
+            conn.commit()
+            
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
     match = c.fetchone()
     c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
@@ -568,6 +579,11 @@ def admin_match_detail(match_id):
             </form>
         </div>
 
+        <div class="flex gap-2 mb-4">
+            <a href="/admin/add_players_page?match_id={match['id']}" class="flex-1 text-center bg-emerald-600 py-2.5 rounded-xl font-bold text-xs shadow">➕ Add More Players</a>
+            <a href="/admin/update_points_page?match_id={match['id']}" class="flex-1 text-center bg-amber-600 py-2.5 rounded-xl font-bold text-xs shadow">⚡ Update Points & Lineup</a>
+        </div>
+
         <h3 class="font-bold text-amber-400 text-xs mb-2">🏆 Contests in this Match</h3>
     """
     for contest in contests:
@@ -588,16 +604,31 @@ def admin_match_detail(match_id):
         </div>
         """
     
-    html += '<h3 class="font-bold text-indigo-300 text-xs mt-4 mb-2">👥 Match Players & Lineup</h3><div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl space-y-2">'
+    html += '<h3 class="font-bold text-indigo-300 text-xs mt-4 mb-2">👥 Match Players (Edit / Lineup / Points)</h3><div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl space-y-2">'
     for p in players:
         dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
         html += f"""
-        <div class="flex justify-between items-center bg-gray-800 p-2 rounded-xl text-xs">
-            <div class="flex items-center gap-2">
-                <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
-                <span>{p['name']} ({p['team']}) - {p['role']}</span>
+        <div class="bg-gray-800 p-2.5 rounded-xl text-xs space-y-2">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
+                    <span class="font-bold">{p['name']} ({p['team']}) - {p['role']}</span>
+                </div>
+                <span class="font-bold text-emerald-400">{p['points']} pts</span>
             </div>
-            <span class="font-bold text-emerald-400">{p['points']} pts</span>
+            <form method="POST" class="flex gap-2 items-center pt-1 border-t border-gray-700">
+                <input type="hidden" name="action" value="edit_player">
+                <input type="hidden" name="player_id" value="{p['id']}">
+                <input type="text" name="name" value="{p['name']}" required class="flex-1 bg-gray-700 p-1 rounded text-white text-xs">
+                <input type="text" name="team" value="{p['team']}" required class="w-16 bg-gray-700 p-1 rounded text-white text-xs text-center">
+                <select name="role" class="bg-gray-700 p-1 rounded text-white text-xs">
+                    <option value="Batsman" {"selected" if p['role']=='Batsman' else ""}>Bat</option>
+                    <option value="Bowler" {"selected" if p['role']=='Bowler' else ""}>Bowl</option>
+                    <option value="All-Rounder" {"selected" if p['role']=='All-Rounder' else ""}>All-R</option>
+                    <option value="WK" {"selected" if p['role']=='WK' else ""}>WK</option>
+                </select>
+                <button type="submit" class="bg-indigo-600 px-2 py-1 rounded font-bold text-[10px]">Save</button>
+            </form>
         </div>
         """
     html += """
