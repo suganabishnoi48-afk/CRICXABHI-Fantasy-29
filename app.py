@@ -112,6 +112,11 @@ def index():
             p_role = request.form.get('p_role')
             c.execute('INSERT INTO players (match_id, name, team, role, points) VALUES (%s, %s, %s, %s, %s)', (match_id, p_name, p_team, p_role, 0.0))
             conn.commit()
+        elif action == 'update_player_points':
+            player_id = request.form.get('player_id')
+            new_points = float(request.form.get('points', 0))
+            c.execute('UPDATE players SET points = %s WHERE id = %s', (new_points, player_id))
+            conn.commit()
         elif action == 'contest':
             match_id = request.form.get('match_id')
             c_name = request.form.get('c_name')
@@ -121,20 +126,19 @@ def index():
             breakup = request.form.get('breakup')
             c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', (match_id, c_name, prize, fee, spots, breakup))
             conn.commit()
-        elif action == 'update_player_points':
-            player_id = request.form.get('player_id')
-            new_points = float(request.form.get('points', 0))
-            c.execute('UPDATE players SET points = %s WHERE id = %s', (new_points, player_id))
-            conn.commit()
+        elif action == 'add_user_coins':
+            target_user_id = request.form.get('target_user_id')
+            add_amt = float(request.form.get('add_amt', 0))
+            if add_amt != 0:
+                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
+                conn.commit()
         elif action == 'update_status':
             match_id = request.form.get('match_id')
             status = request.form.get('status')
             c.execute('UPDATE matches SET status = %s WHERE id = %s', (status, match_id))
             conn.commit()
             
-            # Agar match Complete ho gaya, toh points calculate karo aur auto coins distribute karo!
             if status == 'Completed':
-                # 1. Calculate all team points for this match
                 c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
                 match_players = {p['name']: p['points'] for p in c.fetchall()}
                 
@@ -155,7 +159,6 @@ def index():
                     c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
                 conn.commit()
                 
-                # 2. Distribute winnings for contests in this match
                 c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
                 match_contests = c.fetchall()
                 for con in match_contests:
@@ -167,7 +170,7 @@ def index():
                     for idx, part in enumerate(participants, 1):
                         rank = idx
                         winnings = 0
-                        if rank == 1:  # 1st rank winner gets prize pool
+                        if rank == 1:
                             winnings = con['prize_pool']
                             c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
                         
@@ -178,6 +181,8 @@ def index():
     matches = c.fetchall()
     c.execute('SELECT * FROM players')
     players = c.fetchall()
+    c.execute('SELECT * FROM users ORDER BY id ASC')
+    all_users = c.fetchall()
     conn.close()
     
     html = f"""
@@ -266,9 +271,30 @@ def index():
                 <button class="w-full bg-amber-600 py-2.5 rounded-xl font-bold text-xs">Update Points</button>
             </form>
 
+            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. User Data (Manage Coins)</h3>
+        """
+        for u in all_users:
+            html += f"""
+            <div class="flex items-center justify-between bg-gray-800 p-2.5 rounded-xl mb-2 text-xs">
+                <div>
+                    <span class="font-bold text-emerald-400">{u['username']}</span> 
+                    <span class="text-gray-300 ml-2">🪙 {u['coins']} coins</span>
+                </div>
+                <form method="POST" class="flex items-center gap-1">
+                    <input type="hidden" name="action" value="add_user_coins">
+                    <input type="hidden" name="target_user_id" value="{u['id']}">
+                    <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1 rounded text-xs text-white text-center">
+                    <button type="submit" class="bg-emerald-600 px-2.5 py-1 rounded font-bold text-xs" title="Add Coins">➕</button>
+                </form>
+            </div>
+            """
+        html += """
+            </div>
+
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <input type="hidden" name="action" value="contest">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Create Contest</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Create Contest</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -285,7 +311,7 @@ def index():
             
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
                 <input type="hidden" name="action" value="update_status">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Match Status Control (Auto Coins Distribution on Complete)</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">6. Match Status Control (Auto Coins Distribution on Complete)</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -516,7 +542,6 @@ def match_detail(match_id):
         </div>
     """
     
-    # Match status check: Upcoming hone par hi team create ya edit kar sakte hain
     if match['status'] == 'Upcoming':
         if not my_teams:
             html += f'''
@@ -587,7 +612,6 @@ def create_team(match_id):
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
     match = c.fetchone()
     
-    # Match start hone ke baad team create/edit block karo
     if match['status'] != 'Upcoming':
         conn.close()
         return "<script>alert('Match has already started or completed! You cannot edit teams now.'); window.location.href='/match/" + str(match_id) + "';</script>"
@@ -608,7 +632,6 @@ def create_team(match_id):
             msg = "❌ Captain aur Vice-Captain select karna zaroori hai!"
         else:
             p_str = ",".join(selected_players)
-            # Check if team already exists for this user and match
             c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (match_id, session['user_id']))
             existing_team = c.fetchone()
             if existing_team:
