@@ -217,6 +217,11 @@ def index():
         """
     
     if session.get('is_admin'):
+        # Separate matches by status for admin management
+        live_matches = [m for m in matches if m['status'] == 'Live']
+        upcoming_matches = [m for m in matches if m['status'] == 'Upcoming']
+        completed_matches = [m for m in matches if m['status'] == 'Completed']
+
         html += """
         <div class="mt-6 border-t border-gray-800 pt-4">
             <h2 class="text-lg font-bold text-amber-400 mb-3">Admin Panel</h2>
@@ -230,9 +235,71 @@ def index():
                 <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Add Match</button>
             </form>
             
+            <!-- Matches Section with Live, Upcoming, Completed -->
+            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
+                <h3 class="font-bold mb-2 text-amber-300 text-xs">2. Matches Management (Live / Upcoming / Completed)</h3>
+                
+                <!-- Upcoming Sub-section -->
+                <div class="mb-3 bg-gray-800 p-2.5 rounded-xl">
+                    <h4 class="text-xs font-bold text-emerald-400 mb-1">🟢 Upcoming Matches</h4>
+        """
+        if not upcoming_matches:
+            html += '<p class="text-[10px] text-gray-400">No upcoming matches.</p>'
+        for m in upcoming_matches:
+            html += f'''
+            <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
+                <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
+                <form action="/admin/delete_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                    <input type="hidden" name="match_id" value="{m['id']}">
+                    <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
+                </form>
+            </div>
+            '''
+        html += """
+                </div>
+
+                <!-- Live Sub-section -->
+                <div class="mb-3 bg-gray-800 p-2.5 rounded-xl">
+                    <h4 class="text-xs font-bold text-amber-400 mb-1">🔴 Live Matches</h4>
+        """
+        if not live_matches:
+            html += '<p class="text-[10px] text-gray-400">No live matches.</p>'
+        for m in live_matches:
+            html += f'''
+            <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
+                <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
+                <form action="/admin/delete_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                    <input type="hidden" name="match_id" value="{m['id']}">
+                    <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
+                </form>
+            </div>
+            '''
+        html += """
+                </div>
+
+                <!-- Completed Sub-section -->
+                <div class="bg-gray-800 p-2.5 rounded-xl">
+                    <h4 class="text-xs font-bold text-gray-400 mb-1">🏁 Completed Matches</h4>
+        """
+        if not completed_matches:
+            html += '<p class="text-[10px] text-gray-400">No completed matches.</p>'
+        for m in completed_matches:
+            html += f'''
+            <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
+                <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
+                <form action="/admin/delete_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                    <input type="hidden" name="match_id" value="{m['id']}">
+                    <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
+                </form>
+            </div>
+            '''
+        html += """
+                </div>
+            </div>
+            
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <input type="hidden" name="action" value="player">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">2. Add Player</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Add Player</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -252,7 +319,7 @@ def index():
             
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <input type="hidden" name="action" value="update_player_points">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Update Player Points</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Update Player Points</h3>
                 <select name="player_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for p in players:
@@ -265,7 +332,7 @@ def index():
 
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center">
                 <div>
-                    <h3 class="font-bold text-indigo-300 text-xs">4. User Data Management</h3>
+                    <h3 class="font-bold text-indigo-300 text-xs">5. User Data Management</h3>
                     <p class="text-[10px] text-gray-400">View all users and add coins</p>
                 </div>
                 <a href="/admin/users" class="bg-indigo-600 px-3 py-2 rounded-xl font-bold text-xs shadow">Show More →</a>
@@ -273,7 +340,7 @@ def index():
 
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <input type="hidden" name="action" value="contest">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Create Contest</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">6. Create Contest</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -290,7 +357,7 @@ def index():
             
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
                 <input type="hidden" name="action" value="update_status">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">6. Match Status Control (Auto Coins Distribution on Complete)</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">7. Match Status Control (Auto Coins Distribution on Complete)</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -312,6 +379,109 @@ def index():
     </html>
     """
     return render_template_string(html)
+
+@app.route('/admin/match/<int:match_id>')
+def admin_match_detail(match_id):
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
+    match = c.fetchone()
+    c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
+    contests = c.fetchall()
+    c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
+    players = c.fetchall()
+    conn.close()
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Match Details</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center justify-between mb-4 shadow">
+            <div class="flex items-center">
+                <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+                <h1 class="text-sm font-bold">{match['team1']} vs {match['team2']} ({match['status']})</h1>
+            </div>
+            <form action="/admin/delete_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Match:') === '1234567890';">
+                <input type="hidden" name="match_id" value="{match['id']}">
+                <button type="submit" class="bg-rose-600 px-3 py-1 rounded font-bold text-xs">Delete Match</button>
+            </form>
+        </div>
+
+        <h3 class="font-bold text-amber-400 text-xs mb-2">🏆 Contests in this Match</h3>
+    """
+    for contest in contests:
+        html += f"""
+        <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center text-xs">
+            <div>
+                <span class="font-bold">{contest['name']}</span>
+                <p class="text-[11px] text-gray-400">Prize Pool: 🪙 {contest['prize_pool']} | Fee: 🪙 {contest['entry_fee']}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="/contest/{contest['id']}" class="bg-gray-800 px-3 py-1.5 rounded font-bold">Leaderboard</a>
+                <form action="/admin/delete_contest" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Contest:') === '1234567890';">
+                    <input type="hidden" name="contest_id" value="{contest['id']}">
+                    <input type="hidden" name="match_id" value="{match['id']}">
+                    <button type="submit" class="bg-rose-600 px-2.5 py-1.5 rounded font-bold">Delete</button>
+                </form>
+            </div>
+        </div>
+        """
+    
+    html += '<h3 class="font-bold text-indigo-300 text-xs mt-4 mb-2">👥 Match Players</h3><div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl space-y-2">'
+    for p in players:
+        html += f"""
+        <div class="flex justify-between items-center bg-gray-800 p-2 rounded-xl text-xs">
+            <span>{p['name']} ({p['team']}) - {p['role']}</span>
+            <span class="font-bold text-emerald-400">{p['points']} pts</span>
+        </div>
+        """
+    html += """
+        </div>
+        <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/admin/delete_match', methods=['POST'])
+def delete_match():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    match_id = request.form.get('match_id')
+    conn = get_db_connection()
+    c = conn.cursor()
+    # Delete match related data cleanly
+    c.execute('DELETE FROM contest_participants WHERE contest_id IN (SELECT id FROM contests WHERE match_id = %s)', (match_id,))
+    c.execute('DELETE FROM contests WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM teams WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM players WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM matches WHERE id = %s', (match_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/admin/delete_contest', methods=['POST'])
+def delete_contest():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    contest_id = request.form.get('contest_id')
+    match_id = request.form.get('match_id')
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM contest_participants WHERE contest_id = %s', (contest_id,))
+    c.execute('DELETE FROM contests WHERE id = %s', (contest_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_match_detail', match_id=match_id))
 
 @app.route('/admin/users', methods=['GET', 'POST'])
 def admin_users():
