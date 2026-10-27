@@ -126,12 +126,6 @@ def index():
             breakup = request.form.get('breakup')
             c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', (match_id, c_name, prize, fee, spots, breakup))
             conn.commit()
-        elif action == 'add_user_coins':
-            target_user_id = request.form.get('target_user_id')
-            add_amt = float(request.form.get('add_amt', 0))
-            if add_amt != 0:
-                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
-                conn.commit()
         elif action == 'update_status':
             match_id = request.form.get('match_id')
             status = request.form.get('status')
@@ -181,8 +175,6 @@ def index():
     matches = c.fetchall()
     c.execute('SELECT * FROM players')
     players = c.fetchall()
-    c.execute('SELECT * FROM users ORDER BY id ASC')
-    all_users = c.fetchall()
     conn.close()
     
     html = f"""
@@ -271,25 +263,12 @@ def index():
                 <button class="w-full bg-amber-600 py-2.5 rounded-xl font-bold text-xs">Update Points</button>
             </form>
 
-            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. User Data (Manage Coins)</h3>
-        """
-        for u in all_users:
-            html += f"""
-            <div class="flex items-center justify-between bg-gray-800 p-2.5 rounded-xl mb-2 text-xs">
+            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center">
                 <div>
-                    <span class="font-bold text-emerald-400">{u['username']}</span> 
-                    <span class="text-gray-300 ml-2">🪙 {u['coins']} coins</span>
+                    <h3 class="font-bold text-indigo-300 text-xs">4. User Data Management</h3>
+                    <p class="text-[10px] text-gray-400">View all users and add coins</p>
                 </div>
-                <form method="POST" class="flex items-center gap-1">
-                    <input type="hidden" name="action" value="add_user_coins">
-                    <input type="hidden" name="target_user_id" value="{u['id']}">
-                    <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1 rounded text-xs text-white text-center">
-                    <button type="submit" class="bg-emerald-600 px-2.5 py-1 rounded font-bold text-xs" title="Add Coins">➕</button>
-                </form>
-            </div>
-            """
-        html += """
+                <a href="/admin/users" class="bg-indigo-600 px-3 py-2 rounded-xl font-bold text-xs shadow">Show More →</a>
             </div>
 
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
@@ -329,6 +308,65 @@ def index():
         """
 
     html += """
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/admin/users', methods=['GET', 'POST'])
+def admin_users():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add_user_coins':
+            target_user_id = request.form.get('target_user_id')
+            add_amt = float(request.form.get('add_amt', 0))
+            if add_amt != 0:
+                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
+                conn.commit()
+                
+    c.execute('SELECT * FROM users ORDER BY id ASC')
+    all_users = c.fetchall()
+    conn.close()
+    
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>All Users Data</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">👥 User Data & Coin Management</h1>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2">
+    """
+    for u in all_users:
+        html += f"""
+        <div class="flex items-center justify-between bg-gray-800 p-3 rounded-xl text-xs border border-gray-700">
+            <div>
+                <span class="font-bold text-emerald-400">{u['username']}</span> 
+                <p class="text-gray-300 mt-0.5">Coins: 🪙 {u['coins']}</p>
+            </div>
+            <form method="POST" class="flex items-center gap-1">
+                <input type="hidden" name="action" value="add_user_coins">
+                <input type="hidden" name="target_user_id" value="{u['id']}">
+                <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1.5 rounded text-xs text-white text-center">
+                <button type="submit" class="bg-emerald-600 px-3 py-1.5 rounded font-bold text-xs" title="Add Coins">➕</button>
+            </form>
+        </div>
+        """
+    html += """
+        </div>
+        <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
     </body>
     </html>
     """
