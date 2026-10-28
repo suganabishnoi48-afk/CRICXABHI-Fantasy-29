@@ -294,7 +294,7 @@ def index():
             html += f'''
             <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
                 <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
-                <form action="/admin/remove_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                <form action="/admin/delete_match_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
                     <input type="hidden" name="match_id" value="{m['id']}">
                     <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
                 </form>
@@ -312,7 +312,7 @@ def index():
             html += f'''
             <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
                 <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
-                <form action="/admin/remove_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                <form action="/admin/delete_match_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
                     <input type="hidden" name="match_id" value="{m['id']}">
                     <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
                 </form>
@@ -330,7 +330,7 @@ def index():
             html += f'''
             <div class="flex justify-between items-center py-1 border-b border-gray-700 text-xs">
                 <a href="/admin/match/{m['id']}" class="text-indigo-300 font-bold hover:underline">{m['team1']} vs {m['team2']}</a>
-                <form action="/admin/remove_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
+                <form action="/admin/delete_match_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete:') === '1234567890';">
                     <input type="hidden" name="match_id" value="{m['id']}">
                     <button type="submit" class="bg-rose-600 px-2 py-0.5 rounded text-[10px] font-bold">Delete</button>
                 </form>
@@ -484,7 +484,7 @@ def admin_match_detail(match_id):
                 <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
                 <h1 class="text-sm font-bold">{match['team1']} vs {match['team2']} ({match['status']})</h1>
             </div>
-            <form action="/admin/remove_match" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Match:') === '1234567890';">
+            <form action="/admin/delete_match_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Match:') === '1234567890';">
                 <input type="hidden" name="match_id" value="{match['id']}">
                 <button type="submit" class="bg-rose-600 px-3 py-1 rounded font-bold text-xs">Delete Match</button>
             </form>
@@ -501,7 +501,7 @@ def admin_match_detail(match_id):
             </div>
             <div class="flex items-center gap-2">
                 <a href="/contest/{contest['id']}" class="bg-gray-800 px-3 py-1.5 rounded font-bold">Leaderboard</a>
-                <form action="/admin/remove_contest" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Contest:') === '1234567890';">
+                <form action="/admin/delete_contest_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Contest:') === '1234567890';">
                     <input type="hidden" name="contest_id" value="{contest['id']}">
                     <input type="hidden" name="match_id" value="{match['id']}">
                     <button type="submit" class="bg-rose-600 px-2.5 py-1.5 rounded font-bold">Delete</button>
@@ -578,8 +578,8 @@ def admin_match_detail(match_id):
     """
     return render_template_string(html)
 
-@app.route('/admin/remove_match', methods=['POST'])
-def remove_match():
+@app.route('/admin/delete_match_permanently', methods=['POST'])
+def delete_match_permanently():
     if not session.get('is_admin'):
         return redirect(url_for('login'))
     match_id = request.form.get('match_id')
@@ -594,699 +594,8 @@ def remove_match():
     conn.close()
     return redirect(url_for('index'))
 
-@app.route('/admin/remove_contest', methods=['POST'])
-def remove_contest():
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-    contest_id = request.form.get('contest_id')
-    match_id = request.form.get('match_id')
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('DELETE FROM contest_participants WHERE contest_id = %s', (contest_id,))
-    c.execute('DELETE FROM contests WHERE id = %s', (contest_id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for('admin_match_detail', match_id=match_id))
-
-@app.route('/admin/users', methods=['GET', 'POST'])
-def admin_users():
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    c = conn.cursor()
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'add_user_coins':
-            target_user_id = request.form.get('target_user_id')
-            add_amt = float(request.form.get('add_amt', 0))
-            if add_amt != 0:
-                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
-                conn.commit()
-                
-    c.execute('SELECT * FROM users ORDER BY id ASC')
-    all_users = c.fetchall()
-    conn.close()
-    
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>All Users Data</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">👥 User Data & Coin Management</h1>
-        </div>
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2">
-    """
-    for u in all_users:
-        html += f"""
-        <div class="flex items-center justify-between bg-gray-800 p-3 rounded-xl text-xs border border-gray-700">
-            <div>
-                <span class="font-bold text-emerald-400">{u['username']}</span> 
-                <p class="text-gray-300 mt-0.5">Coins: 🪙 {u['coins']}</p>
-            </div>
-            <form method="POST" class="flex items-center gap-1">
-                <input type="hidden" name="action" value="add_user_coins">
-                <input type="hidden" name="target_user_id" value="{u['id']}">
-                <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1.5 rounded text-xs text-white text-center">
-                <button type="submit" class="bg-emerald-600 px-3 py-1.5 rounded font-bold text-xs" title="Add Coins">➕</button>
-            </form>
-        </div>
-        """
-    html += """
-        </div>
-        <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = ""
-    if request.method == 'POST':
-        login_type = request.form.get('login_type')
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
-        conn = get_db_connection()
-        c = conn.cursor()
-        if login_type == 'admin':
-            if username == 'AbhiAdmin' and password == '29022008':
-                session['is_admin'] = True
-                session['user_id'] = 1
-                session['username'] = 'AbhiAdmin'
-                conn.close()
-                return redirect(url_for('index'))
-            else:
-                error = "❌ Invalid Admin Credentials!"
-        else:
-            c.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
-            user = c.fetchone()
-            if user:
-                session['user_id'] = user['id']
-                session['username'] = user['username']
-                session.pop('is_admin', None)
-                conn.close()
-                return redirect(url_for('index'))
-            else:
-                error = "❌ Invalid Username or Password!"
-        conn.close()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Login</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
-        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
-            <h2 class="text-base font-bold text-indigo-400 mb-4 text-center">🏏 CRICXABHI Login</h2>
-            {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
-            <form method="POST" class="space-y-3">
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Select Login Type</label>
-                    <select name="login_type" id="loginType" onchange="toggleAdmin()" class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                        <option value="user">User ID Login</option>
-                        <option value="admin">Admin ID Login</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1" id="labelName">Username</label>
-                    <input type="text" name="username" placeholder="Enter username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Password</label>
-                    <input type="password" name="password" placeholder="Enter password..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                </div>
-                <button type="submit" class="w-full bg-indigo-600 py-3 rounded-xl font-bold text-xs shadow">Login</button>
-            </form>
-            <div class="text-center mt-4 text-xs text-gray-400">Don't have an account? <a href="/register" class="text-emerald-400 font-bold">Register here</a></div>
-        </div>
-        <script>
-            function toggleAdmin() {{
-                let val = document.getElementById("loginType").value;
-                let lbl = document.getElementById("labelName");
-                if(val === "admin") {{ lbl.innerText = "Admin ID (AbhiAdmin)"; }}
-                else {{ lbl.innerText = "Username"; }}
-            }}
-        </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    error = ""
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        password = request.form.get('password', '').strip()
-        if username and password:
-            conn = get_db_connection()
-            c = conn.cursor()
-            try:
-                c.execute('INSERT INTO users (username, password, coins) VALUES (%s, %s, 0)', (username, password))
-                conn.commit()
-                conn.close()
-                return redirect(url_for('login'))
-            except Exception as e:
-                error = "❌ Username already exists!"
-            conn.close()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Register</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
-        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
-            <h2 class="text-base font-bold text-emerald-400 mb-2 text-center">📝 New User Registration</h2>
-            {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
-            <form method="POST" class="space-y-3">
-                <input type="text" name="username" placeholder="Choose unique username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                <input type="password" name="password" placeholder="Create secure password..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Register Now</button>
-            </form>
-            <div class="text-center mt-4 text-xs text-gray-400">Already registered? <a href="/login" class="text-indigo-400 font-bold">Login here</a></div>
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/wallet', methods=['GET', 'POST'])
-def wallet():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
-    user = c.fetchone()
-    msg = ""
-    if request.method == 'POST':
-        target_name = request.form.get('target_username', '').strip()
-        amt = int(request.form.get('amount', 0))
-        if amt > 0 and user['coins'] >= amt:
-            c.execute('SELECT * FROM users WHERE username = %s', (target_name,))
-            target_user = c.fetchone()
-            if target_user and target_user['id'] != user['id']:
-                c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (amt, user['id']))
-                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (amt, target_user['id']))
-                conn.commit()
-                msg = f"Successfully sent {amt} coins to {target_name}!"
-            else:
-                msg = "❌ Target user not found!"
-        else:
-            msg = "❌ Insufficient coins!"
-    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
-    user = c.fetchone()
-    conn.close()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Share Coin</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">🪙 Share Coin</h1>
-        </div>
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-4">
-            <p class="text-xs text-gray-300 mb-2">My Balance: <b>🪙 {user['coins']} coins</b></p>
-            {f'<div class="bg-indigo-950 text-indigo-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{msg}</div>' if msg else ''}
-            <form method="POST" class="space-y-3">
-                <input type="text" name="target_username" placeholder="Recipient Username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                <input type="number" name="amount" placeholder="Coin Amount..." min="1" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Transfer Coins</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/match/<int:match_id>')
-def match_detail(match_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
-    user = c.fetchone()
-    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
-    match = c.fetchone()
-    c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
-    contests = c.fetchall()
-    c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (match_id, user['id']))
-    my_teams = c.fetchall()
-    conn.close()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Match Detail</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">{match['team1']} vs {match['team2']} ({match['status']})</h1>
-        </div>
-    """
-    
-    if match['status'] == 'Upcoming':
-        if not my_teams:
-            html += f'''
-            <div class="mb-4">
-                <a href="/create_team/{match['id']}" class="block text-center bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">➕ Create Team</a>
-            </div>
-            '''
-        else:
-            html += f'''
-            <div class="mb-4">
-                <a href="/create_team/{match['id']}" class="block text-center bg-amber-600 py-3 rounded-xl font-bold text-xs shadow">✏️ Edit Team</a>
-            </div>
-            '''
-
-    html += '<div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4"><h3 class="font-bold text-indigo-300 text-xs mb-2">🔒 My Created Teams</h3>'
-    if not my_teams:
-        html += '<p class="text-[11px] text-gray-400 mb-2">Pehle apni team banayein!</p>'
-    for t in my_teams:
-        if match['status'] == 'Upcoming':
-            team_action_btn = f'<a href="/create_team/{match_id}" class="text-[10px] bg-amber-500 text-black px-2 py-1 rounded font-bold">Edit</a>'
-        else:
-            team_action_btn = f'<a href="/show_team/{t["id"]}" class="text-[10px] bg-emerald-500 text-black px-2.5 py-1 rounded font-bold">Show Your Team</a>'
-            
-        html += f"""
-        <div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700">
-            <div class="flex justify-between font-bold text-emerald-400 mb-1">
-                <span>{t['team_name']}</span>
-                <div class="flex items-center gap-2">
-                    <span>Score: {t['total_points']} pts</span>
-                    {team_action_btn}
-                </div>
-            </div>
-            <div class="text-gray-300 text-[11px] mb-1">⭐ C (2x): <b>{t['captain']}</b> | 🌟 VC (1.5x): <b>{t['vice_captain']}</b></div>
-        </div>
-        """
-    html += '</div>'
-    
-    html += '<h3 class="font-bold text-amber-400 text-xs mb-2">🏆 Contests</h3>'
-    for contest in contests:
-        join_btn = ""
-        if match['status'] == 'Upcoming':
-            join_btn = f'<a href="/join_contest/{contest["id"]}" class="flex-1 text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs">Join Contest</a>'
-        else:
-            join_btn = '<span class="flex-1 text-center bg-gray-700 text-gray-400 py-2 rounded-xl font-bold text-xs">Locked (Match Started)</span>'
-            
-        html += f"""
-        <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-            <div class="flex justify-between font-bold text-xs mb-1">
-                <a href="/contest/{contest['id']}" class="text-indigo-400 hover:underline"><span>{contest['name']}</span></a>
-                <span>Prize: 🪙 {contest['prize_pool']}</span>
-            </div>
-            <p class="text-[11px] text-gray-400 mb-2">Entry Fee: 🪙 {contest['entry_fee']} | Spots: {contest['spots']}</p>
-            <div class="flex gap-2">
-                <a href="/contest/{contest['id']}" class="flex-1 text-center bg-gray-800 py-2 rounded-xl font-bold text-xs">View Contest</a>
-                {join_btn}
-            </div>
-        </div>
-        """
-    html += '<a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a></body></html>'
-    return render_template_string(html)
-
-@app.route('/create_team/<int:match_id>', methods=['GET', 'POST'])
-def create_team(match_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
-    match = c.fetchone()
-    
-    if match['status'] != 'Upcoming':
-        conn.close()
-        return "<script>alert('Match has already started or completed! You cannot edit teams now.'); window.location.href='/match/" + str(match_id) + "';</script>"
-        
-    c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
-    players = c.fetchall()
-    
-    msg = ""
-    if request.method == 'POST':
-        team_name = request.form.get('team_name', '').strip()
-        selected_players = request.form.getlist('players')
-        captain = request.form.get('captain')
-        vice_captain = request.form.get('vice_captain')
-        
-        if len(selected_players) != 11:
-            msg = "❌ Aapko exact 11 khiladi select karne honge!"
-        elif not captain or not vice_captain:
-            msg = "❌ Captain aur Vice-Captain select karna zaroori hai!"
-        else:
-            p_str = ",".join(selected_players)
-            c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (match_id, session['user_id']))
-            existing_team = c.fetchone()
-            if existing_team:
-                c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
-                          (team_name, captain, vice_captain, p_str, existing_team['id']))
-            else:
-                c.execute('INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players, total_points) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                          (match_id, session['user_id'], team_name, captain, vice_captain, p_str, 0.0))
-            conn.commit()
-            conn.close()
-            return redirect(url_for('match_detail', match_id=match_id))
-    conn.close()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Create Team</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">Create Team: {match['team1']} vs {match['team2']}</h1>
-        </div>
-    """
-    if msg:
-        html += f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{msg}</div>'
-    
-    html += f"""
-        <form method="POST" class="space-y-4">
-            <div>
-                <label class="text-xs text-gray-400 block mb-1">Team Name</label>
-                <input type="text" name="team_name" placeholder="Enter Team Name..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-            </div>
-            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
-                <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (🟢 = Playing Lineup)</h3>
-    """
-    for p in players:
-        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
-        html += f"""
-        <div class="flex items-center justify-between bg-gray-800 p-2 rounded-xl mb-2 text-xs">
-            <label class="flex items-center gap-2 cursor-pointer flex-1">
-                <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
-                <input type="checkbox" name="players" value="{p['name']}" class="w-4 h-4 accent-indigo-600">
-                <span>{p['name']} ({p['team']}) - <span class="text-gray-400">{p['role']}</span></span>
-            </label>
-            <div class="flex gap-2">
-                <label class="text-[10px] bg-gray-700 px-2 py-1 rounded cursor-pointer"><input type="radio" name="captain" value="{p['name']}"> C</label>
-                <label class="text-[10px] bg-gray-700 px-2 py-1 rounded cursor-pointer"><input type="radio" name="vice_captain" value="{p['name']}"> VC</label>
-            </div>
-        </div>
-        """
-    html += """
-            </div>
-            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Save Team</button>
-        </form>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/show_team/<int:team_id>')
-def show_team(team_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM teams WHERE id = %s', (team_id,))
-    team = c.fetchone()
-    c.execute('SELECT * FROM matches WHERE id = %s', (team['match_id'],))
-    match = c.fetchone()
-    c.execute('SELECT * FROM players WHERE match_id = %s', (team['match_id'],))
-    match_players = {p['name']: p for p in c.fetchall()}
-    conn.close()
-    
-    players_list = team['players'].split(',')
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Show Team</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/match/{match['id']}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">Team: {team['team_name']}</h1>
-        </div>
-        
-        <div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4 text-xs">
-            <div class="flex justify-between font-bold text-emerald-400 mb-2">
-                <span>Match: {match['team1']} vs {match['team2']}</span>
-                <span>Total Points: {team['total_points']} pts</span>
-            </div>
-            <p class="text-gray-300">⭐ Captain (2x): <b>{team['captain']}</b> | 🌟 Vice-Captain (1.5x): <b>{team['vice_captain']}</b></p>
-        </div>
-        
-        <div class="space-y-2">
-    """
-    for pname in players_list:
-        pname = pname.strip()
-        p_obj = match_players.get(pname, {'team': '-', 'role': '-', 'points': 0.0, 'is_lineup': 0})
-        base_pts = p_obj['points']
-        dot_color = "bg-emerald-500" if p_obj['is_lineup'] == 1 else "bg-rose-500"
-        multiplier = 1.0
-        mult_label = ""
-        if pname == team['captain']:
-            multiplier = 2.0
-            mult_label = " (C - 2x)"
-        elif pname == team['vice_captain']:
-            multiplier = 1.5
-            mult_label = " (VC - 1.5x)"
-            
-        final_p_pts = base_pts * multiplier
-        html += f"""
-        <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl flex justify-between items-center text-xs">
-            <div class="flex items-center gap-2">
-                <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
-                <div>
-                    <span class="font-bold">{pname}</span>{mult_label}
-                    <p class="text-[10px] text-gray-400">{p_obj['team']} | {p_obj['role']} | Base Pts: {base_pts}</p>
-                </div>
-            </div>
-            <div class="font-bold text-emerald-400">
-                +{final_p_pts} pts
-            </div>
-        </div>
-        """
-    html += """
-        </div>
-        <a href="javascript:history.back()" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Go Back</a>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/join_contest/<int:contest_id>')
-def join_contest(contest_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM contests WHERE id = %s', (contest_id,))
-    contest = c.fetchone()
-    c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
-    match = c.fetchone()
-    
-    if match['status'] != 'Upcoming':
-        conn.close()
-        return "<script>alert('Match has started! You cannot join contests now.'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
-        
-    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
-    user = c.fetchone()
-    c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (contest['match_id'], user['id']))
-    teams = c.fetchall()
-    
-    if user['coins'] < contest['entry_fee']:
-        conn.close()
-        return "<script>alert('Insufficient coins!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
-    
-    if teams:
-        team_id = teams[0]['id']
-        c.execute('SELECT * FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
-        already = c.fetchone()
-        if not already:
-            c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (contest['entry_fee'], user['id']))
-            c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id, rank, winnings) VALUES (%s, %s, %s, %s, %s)',
-                      (contest_id, user['id'], team_id, 0, 0))
-            conn.commit()
-    conn.close()
-    return redirect(url_for('contest_detail', contest_id=contest_id))
-
-@app.route('/contest/<int:contest_id>')
-def contest_detail(contest_id):
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT * FROM contests WHERE id = %s', (contest_id,))
-    contest = c.fetchone()
-    c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
-    match = c.fetchone()
-    
-    c.execute('''SELECT cp.*, u.username, t.team_name, t.total_points, t.id as team_id FROM contest_participants cp
-                 JOIN users u ON cp.user_id = u.id
-                 JOIN teams t ON cp.team_id = t.id
-                 WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (contest_id,))
-    participants = c.fetchall()
-    conn.close()
-    
-    # Parse prize breakup for Prizes tab
-    breakup_rows = ""
-    parts = contest['prize_breakup'].split(',')
-    for p_str in parts:
-        if ':' in p_str:
-            r_rng, amt = p_str.split(':')
-            breakup_rows += f"""
-            <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
-                <span class="font-bold text-amber-400">Rank {r_rng.strip()}</span>
-                <span class="font-bold text-emerald-400">🪙 {amt.strip()} Coins</span>
-            </div>
-            """
-    if not breakup_rows:
-        breakup_rows = '<p class="text-xs text-gray-400 text-center py-4">No prize breakup available.</p>'
-
-    leaderboard_rows = ""
-    if not participants:
-        leaderboard_rows = '<p class="text-xs text-gray-400 text-center py-4">Koi participant nahi hai abhi.</p>'
-    else:
-        for idx, p in enumerate(participants, 1):
-            win_text = f" | Winnings: 🪙 {p['winnings']}" if p['winnings'] > 0 else ""
-            
-            # Fair play rule: Team clickable only if match is Live or Completed
-            if match['status'] in ['Live', 'Completed']:
-                team_link_open = f'<a href="/show_team/{p["team_id"]}" class="text-indigo-300 font-bold hover:underline">'
-                team_link_close = '</a>'
-            else:
-                team_link_open = '<span class="text-gray-300 font-bold">'
-                team_link_close = '</span>'
-
-            leaderboard_rows += f"""
-            <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
-                <div>
-                    <span class="font-bold text-amber-400">#{p['rank'] if p['rank'] > 0 else idx}</span> 
-                    <span class="font-bold text-white">{p['username']}</span>
-                    <p class="text-[10px] text-gray-400">Team: {team_link_open}{p['team_name']}{team_link_close}{win_text}</p>
-                </div>
-                <div class="text-right font-bold text-emerald-400">
-                    {p['total_points']} pts
-                </div>
-            </div>
-            """
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{contest['name']}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/match/{contest['match_id']}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">{contest['name']}</h1>
-        </div>
-
-        <!-- Tabs Header -->
-        <div class="flex border-b border-gray-800 mb-4">
-            <button onclick="switchTab('prizes')" id="btnPrizes" class="flex-1 pb-2 text-center font-bold text-xs border-b-2 border-rose-500 text-white">PRIZES</button>
-            <button onclick="switchTab('leaderboard')" id="btnLeaderboard" class="flex-1 pb-2 text-center font-bold text-xs border-b-2 border-transparent text-gray-400">LEADERBOARD</button>
-        </div>
-
-        <!-- Prizes Tab Content -->
-        <div id="tabPrizes" class="space-y-2">
-            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 text-xs flex justify-between">
-                <span>Prize Pool: <b>🪙 {contest['prize_pool']}</b></span>
-                <span>Spots: <b>{contest['spots']}</b></span>
-            </div>
-            {breakup_rows}
-        </div>
-
-        <!-- Leaderboard Tab Content -->
-        <div id="tabLeaderboard" class="space-y-2 hidden">
-            {leaderboard_rows}
-        </div>
-
-        <script>
-            function switchTab(tab) {{
-                let pTab = document.getElementById('tabPrizes');
-                let lTab = document.getElementById('tabLeaderboard');
-                let bPrizes = document.getElementById('btnPrizes');
-                let bLeader = document.getElementById('btnLeaderboard');
-
-                if(tab === 'prizes') {{
-                    pTab.classList.remove('hidden');
-                    lTab.classList.add('hidden');
-                    bPrizes.classList.add('border-rose-500', 'text-white');
-                    bPrizes.classList.remove('border-transparent', 'text-gray-400');
-                    bLeader.classList.add('border-transparent', 'text-gray-400');
-                    bLeader.classList.remove('border-rose-500', 'text-white');
-                }} else {{
-                    lTab.classList.remove('hidden');
-                    pTab.classList.add('hidden');
-                    bLeader.classList.add('border-rose-500', 'text-white');
-                    bLeader.classList.remove('border-transparent', 'text-gray-400');
-                    bPrizes.classList.add('border-transparent', 'text-gray-400');
-                    bPrizes.classList.remove('border-rose-500', 'text-white');
-                }}
-            }}
-        </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/admin/remove_match', methods=['POST'])
-def remove_match():
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-    match_id = request.form.get('match_id')
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('DELETE FROM contest_participants WHERE contest_id IN (SELECT id FROM contests WHERE match_id = %s)', (match_id,))
-    c.execute('DELETE FROM contests WHERE match_id = %s', (match_id,))
-    c.execute('DELETE FROM teams WHERE match_id = %s', (match_id,))
-    c.execute('DELETE FROM players WHERE match_id = %s', (match_id,))
-    c.execute('DELETE FROM matches WHERE id = %s', (match_id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for('index'))
-
-@app.route('/admin/remove_contest', methods=['POST'])
-def remove_contest():
+@app.route('/admin/delete_contest_permanently', methods=['POST'])
+def delete_contest_permanently():
     if not session.get('is_admin'):
         return redirect(url_for('login'))
     contest_id = request.form.get('contest_id')
@@ -1794,6 +1103,162 @@ def show_team(team_id):
     html += """
         </div>
         <a href="javascript:history.back()" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Go Back</a>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/join_contest/<int:contest_id>')
+def join_contest(contest_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM contests WHERE id = %s', (contest_id,))
+    contest = c.fetchone()
+    c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
+    match = c.fetchone()
+    
+    if match['status'] != 'Upcoming':
+        conn.close()
+        return "<script>alert('Match has started! You cannot join contests now.'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
+        
+    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+    user = c.fetchone()
+    c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (contest['match_id'], user['id']))
+    teams = c.fetchall()
+    
+    if user['coins'] < contest['entry_fee']:
+        conn.close()
+        return "<script>alert('Insufficient coins!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
+    
+    if teams:
+        team_id = teams[0]['id']
+        c.execute('SELECT * FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
+        already = c.fetchone()
+        if not already:
+            c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (contest['entry_fee'], user['id']))
+            c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id, rank, winnings) VALUES (%s, %s, %s, %s, %s)',
+                      (contest_id, user['id'], team_id, 0, 0))
+            conn.commit()
+    conn.close()
+    return redirect(url_for('contest_detail', contest_id=contest_id))
+
+@app.route('/contest/<int:contest_id>')
+def contest_detail(contest_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM contests WHERE id = %s', (contest_id,))
+    contest = c.fetchone()
+    c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
+    match = c.fetchone()
+    
+    c.execute('''SELECT cp.*, u.username, t.team_name, t.total_points, t.id as team_id FROM contest_participants cp
+                 JOIN users u ON cp.user_id = u.id
+                 JOIN teams t ON cp.team_id = t.id
+                 WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (contest_id,))
+    participants = c.fetchall()
+    conn.close()
+    
+    breakup_rows = ""
+    parts = contest['prize_breakup'].split(',')
+    for p_str in parts:
+        if ':' in p_str:
+            r_rng, amt = p_str.split(':')
+            breakup_rows += f"""
+            <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
+                <span class="font-bold text-amber-400">Rank {r_rng.strip()}</span>
+                <span class="font-bold text-emerald-400">🪙 {amt.strip()} Coins</span>
+            </div>
+            """
+    if not breakup_rows:
+        breakup_rows = '<p class="text-xs text-gray-400 text-center py-4">No prize breakup available.</p>'
+
+    leaderboard_rows = ""
+    if not participants:
+        leaderboard_rows = '<p class="text-xs text-gray-400 text-center py-4">Koi participant nahi hai abhi.</p>'
+    else:
+        for idx, p in enumerate(participants, 1):
+            win_text = f" | Winnings: 🪙 {p['winnings']}" if p['winnings'] > 0 else ""
+            
+            if match['status'] in ['Live', 'Completed']:
+                team_link_open = f'<a href="/show_team/{p["team_id"]}" class="text-indigo-300 font-bold hover:underline">'
+                team_link_close = '</a>'
+            else:
+                team_link_open = '<span class="text-gray-300 font-bold">'
+                team_link_close = '</span>'
+
+            leaderboard_rows += f"""
+            <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
+                <div>
+                    <span class="font-bold text-amber-400">#{p['rank'] if p['rank'] > 0 else idx}</span> 
+                    <span class="font-bold text-white">{p['username']}</span>
+                    <p class="text-[10px] text-gray-400">Team: {team_link_open}{p['team_name']}{team_link_close}{win_text}</p>
+                </div>
+                <div class="text-right font-bold text-emerald-400">
+                    {p['total_points']} pts
+                </div>
+            </div>
+            """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{contest['name']}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/match/{contest['match_id']}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">{contest['name']}</h1>
+        </div>
+
+        <div class="flex border-b border-gray-800 mb-4">
+            <button onclick="switchTab('prizes')" id="btnPrizes" class="flex-1 pb-2 text-center font-bold text-xs border-b-2 border-rose-500 text-white">PRIZES</button>
+            <button onclick="switchTab('leaderboard')" id="btnLeaderboard" class="flex-1 pb-2 text-center font-bold text-xs border-b-2 border-transparent text-gray-400">LEADERBOARD</button>
+        </div>
+
+        <div id="tabPrizes" class="space-y-2">
+            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 text-xs flex justify-between">
+                <span>Prize Pool: <b>🪙 {contest['prize_pool']}</b></span>
+                <span>Spots: <b>{contest['spots']}</b></span>
+            </div>
+            {breakup_rows}
+        </div>
+
+        <div id="tabLeaderboard" class="space-y-2 hidden">
+            {leaderboard_rows}
+        </div>
+
+        <script>
+            function switchTab(tab) {{
+                let pTab = document.getElementById('tabPrizes');
+                let lTab = document.getElementById('tabLeaderboard');
+                let bPrizes = document.getElementById('btnPrizes');
+                let bLeader = document.getElementById('btnLeaderboard');
+
+                if(tab === 'prizes') {{
+                    pTab.classList.remove('hidden');
+                    lTab.classList.add('hidden');
+                    bPrizes.classList.add('border-rose-500', 'text-white');
+                    bPrizes.classList.remove('border-transparent', 'text-gray-400');
+                    bLeader.classList.add('border-transparent', 'text-gray-400');
+                    bLeader.classList.remove('border-rose-500', 'text-white');
+                }} else {{
+                    lTab.classList.remove('hidden');
+                    pTab.classList.add('hidden');
+                    bLeader.classList.add('border-rose-500', 'text-white');
+                    bLeader.classList.remove('border-transparent', 'text-gray-400');
+                    bPrizes.classList.add('border-transparent', 'text-gray-400');
+                    bPrizes.classList.remove('border-rose-500', 'text-white');
+                }}
+            }}
+        </script>
     </body>
     </html>
     """
