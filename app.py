@@ -68,11 +68,12 @@ def init_db():
                     user_id INTEGER,
                     team_id INTEGER,
                     rank INTEGER,
-                    winnings INTEGER DEFAULT 0
+                    winnings REAL DEFAULT 0
                 )''')
     
     try:
         c.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS is_lineup INTEGER DEFAULT 0;')
+        c.execute('ALTER TABLE contest_participants ALTER COLUMN winnings TYPE REAL;')
     except Exception:
         conn.rollback()
 
@@ -124,7 +125,7 @@ def index():
             for r, a in zip(ranks, amounts):
                 if r.strip() and a.strip():
                     breakup_parts.append(f"{r.strip()}:{a.strip()}")
-            breakup_str = ", ".join(breakup_parts) if breakup_parts else "1st: 100%"
+            breakup_str = ", ".join(breakup_parts) if breakup_parts else "1: 100"
             
             c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', 
                       (match_id, c_name, prize, fee, spots, breakup_str))
@@ -156,6 +157,7 @@ def index():
                     c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
                 conn.commit()
                 
+                # Auto Coins Distribution with Tie-Breaker & Prize Splitting Logic
                 c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
                 match_contests = c.fetchall()
                 for con in match_contests:
@@ -182,13 +184,36 @@ def index():
                             else:
                                 breakup_dict[int(r_range)] = amt_val
 
-                    for idx, part in enumerate(participants, 1):
-                        rank = idx
-                        winnings = breakup_dict.get(rank, 0.0)
-                        if winnings > 0:
-                            c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
+                    # Group participants by total_points for tie handling
+                    i = 0
+                    n = len(participants)
+                    current_rank = 1
+                    
+                    while i < n:
+                        # Find all participants with the same points starting from index i
+                        j = i
+                        while j < n and participants[j]['total_points'] == participants[i]['total_points']:
+                            j += 1
                         
-                        c.execute('UPDATE contest_participants SET rank = %s, winnings = %s WHERE id = %s', (rank, winnings, part['id']))
+                        group_size = j - i
+                        # Ranks spanned by this group: current_rank to current_rank + group_size - 1
+                        total_group_prize = 0.0
+                        for r_offset in range(group_size):
+                            r_to_check = current_rank + r_offset
+                            total_group_prize += breakup_dict.get(r_to_check, 0.0)
+                        
+                        share_prize = total_group_prize / group_size if group_size > 0 else 0.0
+                        
+                        for k in range(i, j):
+                            part = participants[k]
+                            winnings = share_prize
+                            rank = current_rank
+                            if winnings > 0:
+                                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
+                            c.execute('UPDATE contest_participants SET rank = %s, winnings = %s WHERE id = %s', (rank, winnings, part['id']))
+                        
+                        current_rank += group_size
+                        i = j
                     conn.commit()
 
     c.execute('SELECT * FROM matches')
@@ -1160,7 +1185,7 @@ def contest_detail(contest_id):
         html += f"""
         <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
             <div>
-                <span class="font-bold text-amber-400">#{idx}</span> <span class="font-bold">{p['username']}</span>
+                <span class="font-bold text-amber-400">#{p['rank']}</span> <span class="font-bold">{p['username']}</span>
                 <p class="text-[10px] text-gray-400">Team: {p['team_name']}{win_text}</p>
             </div>
             <div class="text-right font-bold text-emerald-400">
