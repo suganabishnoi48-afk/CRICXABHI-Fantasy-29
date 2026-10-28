@@ -118,7 +118,6 @@ def index():
             fee = request.form.get('fee')
             spots = request.form.get('spots')
             
-            # Build structured breakup from table inputs
             ranks = request.form.getlist('breakup_rank')
             amounts = request.form.getlist('breakup_amount')
             breakup_parts = []
@@ -157,7 +156,6 @@ def index():
                     c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
                 conn.commit()
                 
-                # Auto Coins Distribution based on breakup table ranges
                 c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
                 match_contests = c.fetchall()
                 for con in match_contests:
@@ -166,7 +164,6 @@ def index():
                                  WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (con['id'],))
                     participants = c.fetchall()
                     
-                    # Parse breakup string e.g. "1:3000000, 2:1000000, 7-106:10000"
                     breakup_dict = {}
                     parts = con['prize_breakup'].split(',')
                     for p_str in parts:
@@ -431,7 +428,6 @@ def admin_match_detail(match_id):
     players = c.fetchall()
     conn.close()
     
-    # Generate rows for adding next batch of players (e.g., serial starting from current count + 1 up to +15)
     start_serial = len(players) + 1
     add_rows_html = ""
     for i in range(start_serial, start_serial + 15):
@@ -1263,6 +1259,182 @@ def admin_users():
     html += """
         </div>
         <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = ""
+    if request.method == 'POST':
+        login_type = request.form.get('login_type')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        conn = get_db_connection()
+        c = conn.cursor()
+        if login_type == 'admin':
+            if username == 'AbhiAdmin' and password == '29022008':
+                session['is_admin'] = True
+                session['user_id'] = 1
+                session['username'] = 'AbhiAdmin'
+                conn.close()
+                return redirect(url_for('index'))
+            else:
+                error = "❌ Invalid Admin Credentials!"
+        else:
+            c.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password))
+            user = c.fetchone()
+            if user:
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                session.pop('is_admin', None)
+                conn.close()
+                return redirect(url_for('index'))
+            else:
+                error = "❌ Invalid Username or Password!"
+        conn.close()
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
+        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
+            <h2 class="text-base font-bold text-indigo-400 mb-4 text-center">🏏 CRICXABHI Login</h2>
+            {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
+            <form method="POST" class="space-y-3">
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Select Login Type</label>
+                    <select name="login_type" id="loginType" onchange="toggleAdmin()" class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                        <option value="user">User ID Login</option>
+                        <option value="admin">Admin ID Login</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1" id="labelName">Username</label>
+                    <input type="text" name="username" placeholder="Enter username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Password</label>
+                    <input type="password" name="password" placeholder="Enter password..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 py-3 rounded-xl font-bold text-xs shadow">Login</button>
+            </form>
+            <div class="text-center mt-4 text-xs text-gray-400">Don't have an account? <a href="/register" class="text-emerald-400 font-bold">Register here</a></div>
+        </div>
+        <script>
+            function toggleAdmin() {{
+                let val = document.getElementById("loginType").value;
+                let lbl = document.getElementById("labelName");
+                if(val === "admin") {{ lbl.innerText = "Admin ID (AbhiAdmin)"; }}
+                else {{ lbl.innerText = "Username"; }}
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    error = ""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        if username and password:
+            conn = get_db_connection()
+            c = conn.cursor()
+            try:
+                c.execute('INSERT INTO users (username, password, coins) VALUES (%s, %s, 0)', (username, password))
+                conn.commit()
+                conn.close()
+                return redirect(url_for('login'))
+            except Exception as e:
+                error = "❌ Username already exists!"
+            conn.close()
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Register</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
+        <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
+            <h2 class="text-base font-bold text-emerald-400 mb-2 text-center">📝 New User Registration</h2>
+            {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
+            <form method="POST" class="space-y-3">
+                <input type="text" name="username" placeholder="Choose unique username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <input type="password" name="password" placeholder="Create secure password..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Register Now</button>
+            </form>
+            <div class="text-center mt-4 text-xs text-gray-400">Already registered? <a href="/login" class="text-indigo-400 font-bold">Login here</a></div>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/wallet', methods=['GET', 'POST'])
+def wallet():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+    user = c.fetchone()
+    msg = ""
+    if request.method == 'POST':
+        target_name = request.form.get('target_username', '').strip()
+        amt = int(request.form.get('amount', 0))
+        if amt > 0 and user['coins'] >= amt:
+            c.execute('SELECT * FROM users WHERE username = %s', (target_name,))
+            target_user = c.fetchone()
+            if target_user and target_user['id'] != user['id']:
+                c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (amt, user['id']))
+                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (amt, target_user['id']))
+                conn.commit()
+                msg = f"Successfully sent {amt} coins to {target_name}!"
+            else:
+                msg = "❌ Target user not found!"
+        else:
+            msg = "❌ Insufficient coins!"
+    c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+    user = c.fetchone()
+    conn.close()
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Share Coin</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">🪙 Share Coin</h1>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl mb-4">
+            <p class="text-xs text-gray-300 mb-2">My Balance: <b>🪙 {user['coins']} coins</b></p>
+            {f'<div class="bg-indigo-950 text-indigo-200 p-2.5 rounded-xl mb-3 text-xs font-bold">{msg}</div>' if msg else ''}
+            <form method="POST" class="space-y-3">
+                <input type="text" name="target_username" placeholder="Recipient Username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <input type="number" name="amount" placeholder="Coin Amount..." min="1" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Transfer Coins</button>
+            </form>
+        </div>
     </body>
     </html>
     """
