@@ -117,8 +117,18 @@ def index():
             prize = request.form.get('prize')
             fee = request.form.get('fee')
             spots = request.form.get('spots')
-            breakup = request.form.get('breakup')
-            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', (match_id, c_name, prize, fee, spots, breakup))
+            
+            # Build structured breakup from table inputs
+            ranks = request.form.getlist('breakup_rank')
+            amounts = request.form.getlist('breakup_amount')
+            breakup_parts = []
+            for r, a in zip(ranks, amounts):
+                if r.strip() and a.strip():
+                    breakup_parts.append(f"{r.strip()}:{a.strip()}")
+            breakup_str = ", ".join(breakup_parts) if breakup_parts else "1st: 100%"
+            
+            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', 
+                      (match_id, c_name, prize, fee, spots, breakup_str))
             conn.commit()
         elif action == 'update_status':
             match_id = request.form.get('match_id')
@@ -147,6 +157,7 @@ def index():
                     c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
                 conn.commit()
                 
+                # Auto Coins Distribution based on breakup table ranges
                 c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
                 match_contests = c.fetchall()
                 for con in match_contests:
@@ -155,11 +166,29 @@ def index():
                                  WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (con['id'],))
                     participants = c.fetchall()
                     
+                    # Parse breakup string e.g. "1:3000000, 2:1000000, 7-106:10000"
+                    breakup_dict = {}
+                    parts = con['prize_breakup'].split(',')
+                    for p_str in parts:
+                        if ':' in p_str:
+                            r_range, amt = p_str.split(':')
+                            r_range = r_range.strip()
+                            try:
+                                amt_val = float(amt.strip())
+                            except:
+                                amt_val = 0.0
+                            
+                            if '-' in r_range:
+                                start_r, end_r = r_range.split('-')
+                                for r_num in range(int(start_r.strip()), int(end_r.strip()) + 1):
+                                    breakup_dict[r_num] = amt_val
+                            else:
+                                breakup_dict[int(r_range)] = amt_val
+
                     for idx, part in enumerate(participants, 1):
                         rank = idx
-                        winnings = 0
-                        if rank == 1:
-                            winnings = con['prize_pool']
+                        winnings = breakup_dict.get(rank, 0.0)
+                        if winnings > 0:
                             c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
                         
                         c.execute('UPDATE contest_participants SET rank = %s, winnings = %s WHERE id = %s', (rank, winnings, part['id']))
@@ -213,7 +242,16 @@ def index():
         upcoming_matches = [m for m in matches if m['status'] == 'Upcoming']
         completed_matches = [m for m in matches if m['status'] == 'Completed']
 
-        html += """
+        breakup_table_rows = ""
+        for r_label in ["1", "2", "3", "4", "5", "6", "7 - 106"]:
+            breakup_table_rows += f"""
+            <tr class="border-b border-gray-800 text-xs">
+                <td class="p-2"><input type="text" name="breakup_rank" value="{r_label}" class="w-full bg-gray-800 p-1 rounded text-white text-center"></td>
+                <td class="p-2"><input type="number" name="breakup_amount" placeholder="Coins / Prize" class="w-full bg-gray-800 p-1 rounded text-white"></td>
+            </tr>
+            """
+
+        html += f"""
         <div class="mt-6 border-t border-gray-800 pt-4">
             <h2 class="text-lg font-bold text-amber-400 mb-3">Admin Panel</h2>
             
@@ -283,36 +321,10 @@ def index():
         html += """
                 </div>
             </div>
-            
-            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">3. Add Players (Bulk Table - Add anytime 4-5 or more)</h3>
-                <form action="/admin/add_players_page" method="GET" class="space-y-2">
-                    <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
-        """
-        for m in matches:
-            html += f'<option value="{m["id"]}">{m["team1"]} vs {m["team2"]}</option>'
-        html += """
-                    </select>
-                    <button type="submit" class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs">Open Add Players Table</button>
-                </form>
-            </div>
-
-            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Update Player Points (Bulk Table)</h3>
-                <form action="/admin/update_points_page" method="GET" class="space-y-2">
-                    <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
-        """
-        for m in matches:
-            html += f'<option value="{m["id"]}">{m["team1"]} vs {m["team2"]}</option>'
-        html += """
-                    </select>
-                    <button type="submit" class="w-full bg-amber-600 py-2.5 rounded-xl font-bold text-xs">Open Update Points Table</button>
-                </form>
-            </div>
 
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center">
                 <div>
-                    <h3 class="font-bold text-indigo-300 text-xs">5. User Data Management</h3>
+                    <h3 class="font-bold text-indigo-300 text-xs">3. User Data Management</h3>
                     <p class="text-[10px] text-gray-400">View all users and add coins</p>
                 </div>
                 <a href="/admin/users" class="bg-indigo-600 px-3 py-2 rounded-xl font-bold text-xs shadow">Show More →</a>
@@ -320,24 +332,39 @@ def index():
 
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3">
                 <input type="hidden" name="action" value="contest">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">6. Create Contest</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">4. Create Contest (with Prize Breakup Table)</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
             html += f'<option value="{m["id"]}">{m["team1"]} vs {m["team2"]}</option>'
-        html += """
+        html += f"""
                 </select>
                 <input type="text" name="c_name" placeholder="Contest Name" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
                 <input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
                 <input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
                 <input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
-                <input type="text" name="breakup" placeholder="Breakup e.g. 1st: 100%" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+                
+                <label class="text-[11px] text-gray-400 block mb-1">Winning Breakup Table (Rank & Prize)</label>
+                <div class="bg-gray-800 p-2 rounded-xl mb-2">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-[10px] text-indigo-300 border-b border-gray-700">
+                                <th class="p-1">Rank / Range</th>
+                                <th class="p-1">Prize (Coins)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {breakup_table_rows}
+                        </tbody>
+                    </table>
+                </div>
+
                 <button class="w-full bg-indigo-600 py-2.5 rounded-xl font-bold text-xs">Create Contest</button>
             </form>
             
             <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
                 <input type="hidden" name="action" value="update_status">
-                <h3 class="font-bold mb-2 text-indigo-300 text-xs">7. Match Status Control (Auto Coins Distribution on Complete)</h3>
+                <h3 class="font-bold mb-2 text-indigo-300 text-xs">5. Match Status Control (Auto Coins Distribution on Complete)</h3>
                 <select name="match_id" class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
         """
         for m in matches:
@@ -360,40 +387,55 @@ def index():
     """
     return render_template_string(html)
 
-@app.route('/admin/add_players_page', methods=['GET', 'POST'])
-def add_players_page():
+@app.route('/admin/match/<int:match_id>', methods=['GET', 'POST'])
+def admin_match_detail(match_id):
     if not session.get('is_admin'):
         return redirect(url_for('login'))
     
-    match_id = request.args.get('match_id') or request.form.get('match_id')
     conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'POST':
-        names = request.form.getlist('name')
-        teams = request.form.getlist('team')
-        roles = request.form.getlist('role')
-        lineups = request.form.getlist('lineup')
-        
-        for i in range(len(names)):
-            p_name = names[i].strip()
-            if p_name:
-                p_team = teams[i].strip()
-                p_role = roles[i]
-                is_lin = 1 if str(i) in lineups else 0
-                c.execute('INSERT INTO players (match_id, name, team, role, points, is_lineup) VALUES (%s, %s, %s, %s, 0, %s)',
-                          (match_id, p_name, p_team, p_role, is_lin))
-        conn.commit()
-        conn.close()
-        return redirect(url_for('admin_match_detail', match_id=match_id))
-        
+        action = request.form.get('action')
+        if action == 'add_players_bulk':
+            names = request.form.getlist('name')
+            teams = request.form.getlist('team')
+            roles = request.form.getlist('role')
+            lineups = request.form.getlist('lineup')
+            
+            for i in range(len(names)):
+                p_name = names[i].strip()
+                if p_name:
+                    p_team = teams[i].strip()
+                    p_role = roles[i]
+                    is_lin = 1 if str(i) in lineups else 0
+                    c.execute('INSERT INTO players (match_id, name, team, role, points, is_lineup) VALUES (%s, %s, %s, %s, 0, %s)',
+                              (match_id, p_name, p_team, p_role, is_lin))
+            conn.commit()
+        elif action == 'edit_player':
+            pid = request.form.get('player_id')
+            p_name = request.form.get('name').strip()
+            p_team = request.form.get('team').strip()
+            p_role = request.form.get('role')
+            p_pts = float(request.form.get('points', 0))
+            is_lin = 1 if request.form.get('is_lineup') == 'on' else 0
+            c.execute('UPDATE players SET name = %s, team = %s, role = %s, points = %s, is_lineup = %s WHERE id = %s', 
+                      (p_name, p_team, p_role, p_pts, is_lin, pid))
+            conn.commit()
+            
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
     match = c.fetchone()
+    c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
+    contests = c.fetchall()
+    c.execute('SELECT * FROM players WHERE match_id = %s ORDER BY id ASC', (match_id,))
+    players = c.fetchall()
     conn.close()
     
-    rows_html = ""
-    for i in range(1, 51):
-        rows_html += f"""
+    # Generate rows for adding next batch of players (e.g., serial starting from current count + 1 up to +15)
+    start_serial = len(players) + 1
+    add_rows_html = ""
+    for i in range(start_serial, start_serial + 15):
+        add_rows_html += f"""
         <tr class="border-b border-gray-800 text-xs">
             <td class="p-2 text-center font-bold text-amber-400">{i}</td>
             <td class="p-2"><input type="text" name="name" placeholder="Player Name" class="w-full bg-gray-800 p-1.5 rounded text-white"></td>
@@ -406,157 +448,9 @@ def add_players_page():
                     <option value="WK">WK</option>
                 </select>
             </td>
-            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{i-1}" class="w-4 h-4 accent-emerald-500"></td>
+            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{i - start_serial}" class="w-4 h-4 accent-emerald-500"></td>
         </tr>
         """
-        
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bulk Add Players</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/admin/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">Add Players Table: {match['team1']} vs {match['team2']}</h1>
-        </div>
-        <form method="POST">
-            <input type="hidden" name="match_id" value="{match_id}">
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-x-auto mb-4">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-800 text-[11px] text-indigo-300">
-                            <th class="p-2 text-center">#</th>
-                            <th class="p-2">Player Name</th>
-                            <th class="p-2">Team Code</th>
-                            <th class="p-2">Role</th>
-                            <th class="p-2 text-center">Lineup?</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-            </div>
-            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Save All Players</button>
-        </form>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/admin/update_points_page', methods=['GET', 'POST'])
-def update_points_page():
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-    
-    match_id = request.args.get('match_id') or request.form.get('match_id')
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    if request.method == 'POST':
-        p_ids = request.form.getlist('player_id')
-        points_list = request.form.getlist('points')
-        lineups = request.form.getlist('lineup')
-        
-        for i in range(len(p_ids)):
-            pid = p_ids[i]
-            pt = float(points_list[i] if points_list[i] else 0)
-            is_lin = 1 if str(i) in lineups else 0
-            c.execute('UPDATE players SET points = %s, is_lineup = %s WHERE id = %s', (pt, is_lin, pid))
-        conn.commit()
-        conn.close()
-        return redirect(url_for('admin_match_detail', match_id=match_id))
-        
-    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
-    match = c.fetchone()
-    c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
-    players = c.fetchall()
-    conn.close()
-    
-    rows_html = ""
-    for idx, p in enumerate(players):
-        checked = "checked" if p['is_lineup'] == 1 else ""
-        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
-        rows_html += f"""
-        <tr class="border-b border-gray-800 text-xs">
-            <input type="hidden" name="player_id" value="{p['id']}">
-            <td class="p-2 text-center"><span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span></td>
-            <td class="p-2 font-bold">{p['name']} <span class="text-gray-400 font-normal">({p['team']})</span></td>
-            <td class="p-2 text-gray-400">{p['role']}</td>
-            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{idx}" {checked} class="w-4 h-4 accent-emerald-500"></td>
-            <td class="p-2"><input type="number" step="0.5" name="points" value="{p['points']}" class="w-20 bg-gray-800 p-1.5 rounded text-white text-center font-bold"></td>
-        </tr>
-        """
-        
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bulk Update Points</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
-        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
-            <a href="/admin/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">Update Points & Lineup: {match['team1']} vs {match['team2']}</h1>
-        </div>
-        <form method="POST">
-            <input type="hidden" name="match_id" value="{match_id}">
-            <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-x-auto mb-4">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-800 text-[11px] text-amber-300">
-                            <th class="p-2 text-center">Status</th>
-                            <th class="p-2">Player Name</th>
-                            <th class="p-2">Role</th>
-                            <th class="p-2 text-center">In Lineup?</th>
-                            <th class="p-2">Points</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-            </div>
-            <button type="submit" class="w-full bg-amber-600 py-3 rounded-xl font-bold text-xs shadow">Update All Points & Lineup</button>
-        </form>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
-
-@app.route('/admin/match/<int:match_id>', methods=['GET', 'POST'])
-def admin_match_detail(match_id):
-    if not session.get('is_admin'):
-        return redirect(url_for('login'))
-    
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    if request.method == 'POST':
-        action = request.form.get('action')
-        if action == 'edit_player':
-            pid = request.form.get('player_id')
-            p_name = request.form.get('name').strip()
-            p_team = request.form.get('team').strip()
-            p_role = request.form.get('role')
-            c.execute('UPDATE players SET name = %s, team = %s, role = %s WHERE id = %s', (p_name, p_team, p_role, pid))
-            conn.commit()
-            
-    c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
-    match = c.fetchone()
-    c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
-    contests = c.fetchall()
-    c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
-    players = c.fetchall()
-    conn.close()
     
     html = f"""
     <!DOCTYPE html>
@@ -579,11 +473,6 @@ def admin_match_detail(match_id):
             </form>
         </div>
 
-        <div class="flex gap-2 mb-4">
-            <a href="/admin/add_players_page?match_id={match['id']}" class="flex-1 text-center bg-emerald-600 py-2.5 rounded-xl font-bold text-xs shadow">➕ Add More Players</a>
-            <a href="/admin/update_points_page?match_id={match['id']}" class="flex-1 text-center bg-amber-600 py-2.5 rounded-xl font-bold text-xs shadow">⚡ Update Points & Lineup</a>
-        </div>
-
         <h3 class="font-bold text-amber-400 text-xs mb-2">🏆 Contests in this Match</h3>
     """
     for contest in contests:
@@ -604,30 +493,63 @@ def admin_match_detail(match_id):
         </div>
         """
     
-    html += '<h3 class="font-bold text-indigo-300 text-xs mt-4 mb-2">👥 Match Players (Edit / Lineup / Points)</h3><div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl space-y-2">'
-    for p in players:
-        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
-        html += f"""
-        <div class="bg-gray-800 p-2.5 rounded-xl text-xs space-y-2">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                    <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
-                    <span class="font-bold">{p['name']} ({p['team']}) - {p['role']}</span>
-                </div>
-                <span class="font-bold text-emerald-400">{p['points']} pts</span>
+    html += f"""
+        <h3 class="font-bold text-indigo-300 text-xs mt-4 mb-2">➕ Add More Players (Table Format)</h3>
+        <form method="POST" class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-6">
+            <input type="hidden" name="action" value="add_players_bulk">
+            <div class="overflow-x-auto mb-3">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-800 text-[11px] text-indigo-300">
+                            <th class="p-2 text-center">#</th>
+                            <th class="p-2">Player Name</th>
+                            <th class="p-2">Team Code</th>
+                            <th class="p-2">Role</th>
+                            <th class="p-2 text-center">Lineup?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {add_rows_html}
+                    </tbody>
+                </table>
             </div>
-            <form method="POST" class="flex gap-2 items-center pt-1 border-t border-gray-700">
+            <button type="submit" class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs shadow">Save Added Players</button>
+        </form>
+
+        <h3 class="font-bold text-indigo-300 text-xs mb-2">👥 Saved Players List (Edit Name / Points / Lineup)</h3>
+        <div class="space-y-2 mb-4">
+    """
+    for idx, p in enumerate(players, 1):
+        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
+        checked_lineup = "checked" if p['is_lineup'] == 1 else ""
+        html += f"""
+        <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl text-xs space-y-2">
+            <form method="POST" class="flex flex-col gap-2">
                 <input type="hidden" name="action" value="edit_player">
                 <input type="hidden" name="player_id" value="{p['id']}">
-                <input type="text" name="name" value="{p['name']}" required class="flex-1 bg-gray-700 p-1 rounded text-white text-xs">
-                <input type="text" name="team" value="{p['team']}" required class="w-16 bg-gray-700 p-1 rounded text-white text-xs text-center">
-                <select name="role" class="bg-gray-700 p-1 rounded text-white text-xs">
-                    <option value="Batsman" {"selected" if p['role']=='Batsman' else ""}>Bat</option>
-                    <option value="Bowler" {"selected" if p['role']=='Bowler' else ""}>Bowl</option>
-                    <option value="All-Rounder" {"selected" if p['role']=='All-Rounder' else ""}>All-R</option>
-                    <option value="WK" {"selected" if p['role']=='WK' else ""}>WK</option>
-                </select>
-                <button type="submit" class="bg-indigo-600 px-2 py-1 rounded font-bold text-[10px]">Save</button>
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <span class="text-amber-400 font-bold">#{idx}</span>
+                        <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
+                        <span class="font-bold">{p['name']} ({p['team']})</span>
+                    </div>
+                    <span class="font-bold text-emerald-400">{p['points']} pts</span>
+                </div>
+                <div class="flex gap-2 items-center pt-1 border-t border-gray-800">
+                    <input type="text" name="name" value="{p['name']}" required class="flex-1 bg-gray-800 p-1.5 rounded text-white text-xs" placeholder="Name">
+                    <input type="text" name="team" value="{p['team']}" required class="w-16 bg-gray-800 p-1.5 rounded text-white text-xs text-center" placeholder="Team">
+                    <select name="role" class="bg-gray-800 p-1.5 rounded text-white text-xs">
+                        <option value="Batsman" {"selected" if p['role']=='Batsman' else ""}>Bat</option>
+                        <option value="Bowler" {"selected" if p['role']=='Bowler' else ""}>Bowl</option>
+                        <option value="All-Rounder" {"selected" if p['role']=='All-Rounder' else ""}>All-R</option>
+                        <option value="WK" {"selected" if p['role']=='WK' else ""}>WK</option>
+                    </select>
+                    <input type="number" step="0.5" name="points" value="{p['points']}" class="w-16 bg-gray-800 p-1.5 rounded text-white text-xs text-center font-bold" placeholder="Pts">
+                    <label class="flex items-center gap-1 text-[10px]" title="Lineup Check">
+                        <input type="checkbox" name="is_lineup" {checked_lineup} class="w-4 h-4 accent-emerald-500"> 🟢
+                    </label>
+                    <button type="submit" class="bg-indigo-600 px-3 py-1.5 rounded font-bold text-xs">Save</button>
+                </div>
             </form>
         </div>
         """
@@ -1252,6 +1174,95 @@ def contest_detail(contest_id):
         """
     html += """
         </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/admin/delete_match', methods=['POST'])
+def delete_match():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    match_id = request.form.get('match_id')
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM contest_participants WHERE contest_id IN (SELECT id FROM contests WHERE match_id = %s)', (match_id,))
+    c.execute('DELETE FROM contests WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM teams WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM players WHERE match_id = %s', (match_id,))
+    c.execute('DELETE FROM matches WHERE id = %s', (match_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/admin/delete_contest', methods=['POST'])
+def delete_contest():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    contest_id = request.form.get('contest_id')
+    match_id = request.form.get('match_id')
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM contest_participants WHERE contest_id = %s', (contest_id,))
+    c.execute('DELETE FROM contests WHERE id = %s', (contest_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_match_detail', match_id=match_id))
+
+@app.route('/admin/users', methods=['GET', 'POST'])
+def admin_users():
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add_user_coins':
+            target_user_id = request.form.get('target_user_id')
+            add_amt = float(request.form.get('add_amt', 0))
+            if add_amt != 0:
+                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
+                conn.commit()
+                
+    c.execute('SELECT * FROM users ORDER BY id ASC')
+    all_users = c.fetchall()
+    conn.close()
+    
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>All Users Data</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">👥 User Data & Coin Management</h1>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2">
+    """
+    for u in all_users:
+        html += f"""
+        <div class="flex items-center justify-between bg-gray-800 p-3 rounded-xl text-xs border border-gray-700">
+            <div>
+                <span class="font-bold text-emerald-400">{u['username']}</span> 
+                <p class="text-gray-300 mt-0.5">Coins: 🪙 {u['coins']}</p>
+            </div>
+            <form method="POST" class="flex items-center gap-1">
+                <input type="hidden" name="action" value="add_user_coins">
+                <input type="hidden" name="target_user_id" value="{u['id']}">
+                <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1.5 rounded text-xs text-white text-center">
+                <button type="submit" class="bg-emerald-600 px-3 py-1.5 rounded font-bold text-xs" title="Add Coins">➕</button>
+            </form>
+        </div>
+        """
+    html += """
+        </div>
+        <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
     </body>
     </html>
     """
