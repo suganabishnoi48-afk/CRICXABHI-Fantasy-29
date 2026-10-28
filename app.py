@@ -50,6 +50,7 @@ def init_db():
                     prize_pool INTEGER,
                     entry_fee INTEGER,
                     spots INTEGER,
+                    team_limit INTEGER DEFAULT 1,
                     prize_breakup TEXT
                 )''')
     c.execute('''CREATE TABLE IF NOT EXISTS teams (
@@ -74,6 +75,7 @@ def init_db():
     try:
         c.execute('ALTER TABLE players ADD COLUMN IF NOT EXISTS is_lineup INTEGER DEFAULT 0;')
         c.execute('ALTER TABLE contest_participants ALTER COLUMN winnings TYPE REAL;')
+        c.execute('ALTER TABLE contests ADD COLUMN IF NOT EXISTS team_limit INTEGER DEFAULT 1;')
     except Exception:
         conn.rollback()
 
@@ -89,6 +91,105 @@ init_db()
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+@app.route('/terms')
+def terms():
+    tc_text = """
+    CRICXABHI FANTASY - TERMS & CONDITIONS AND DISCLAIMER
+    
+    Welcome to CRICXABHI Fantasy. By accessing, registering, or participating in any contests, matches, or activities hosted on this platform, you agree to comply with and be bound by the following comprehensive Terms and Conditions. Please read them carefully before using our services.
+    
+    1. Nature of the Platform & Entertainment Purpose
+    CRICXABHI Fantasy is strictly designed and operated as a free-to-play or simulated social entertainment platform intended purely for recreation, skill testing, and entertainment purposes related to cricket statistics and analytics. This platform does not constitute a real-money gambling, betting, or lotteries website.
+    
+    2. Simulated Coins and Virtual Economy
+    All coins, tokens, and rewards utilized within CRICXABHI Fantasy are entirely virtual currency ("Coins"). These coins hold no real-world monetary value, cannot be exchanged for fiat currency, cash, or any physical assets, and are restricted solely to internal gameplay mechanics, creating teams, and joining friendly contests within the application ecosystem.
+    
+    3. Limitation of Liability & Disclaimer of Financial Responsibility
+    The creators, administrators, developers, and owners of CRICXABHI Fantasy (collectively referred to as the "Platform Owner") hold absolutely no responsibility, legal liability, or obligation whatsoever regarding any external financial transactions, private agreements, offline wagers, or informal money exchanges conducted between users or third parties. 
+    
+    4. User Sole Responsibility
+    Users acknowledge and agree that any participation, coin transfers, or competitive engagement is done entirely at their own discretion and risk. The Platform Owner shall not be held liable for any direct, indirect, incidental, or consequential losses, disputes, or claims arising out of user interactions, unauthorized account access, or misuse of the platform. Users bear sole and absolute responsibility for their actions, and the platform owner assumes zero liability for any external monetary exchanges or claims.
+    
+    5. Fair Play, Code of Conduct, and Account Termination
+    Users must maintain fair play standards. Creating multiple fraudulent accounts, exploiting software bugs, attempting unauthorized database manipulation, or engaging in abusive behavior will result in immediate permanent account termination, forfeiture of virtual coins, and revocation of access privileges without prior notice.
+    
+    6. Modifications and Governing Policies
+    The Platform Owner reserves the right to modify, update, suspend, or terminate any feature, contest, database record, or these Terms and Conditions at any time without prior notice. Continued use of the platform signifies your acceptance of any updated guidelines.
+    """
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Terms & Conditions</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">Terms & Conditions</h1>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl text-xs space-y-3 leading-relaxed whitespace-pre-line text-gray-300">
+            {{ tc }}
+        </div>
+    </body>
+    </html>
+    """, tc=tc_text)
+
+@app.route('/delete_account', methods=['GET', 'POST'])
+def delete_account():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    error = ""
+    if request.method == 'POST':
+        uname = request.form.get('username', '').strip()
+        pwd = request.form.get('password', '').strip()
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+        u = c.fetchone()
+        
+        if u and u['username'] == uname and u['password'] == pwd:
+            uid = session['user_id']
+            c.execute('DELETE FROM contest_participants WHERE user_id = %s', (uid,))
+            c.execute('DELETE FROM teams WHERE user_id = %s', (uid,))
+            c.execute('DELETE FROM users WHERE id = %s', (uid,))
+            conn.commit()
+            conn.close()
+            session.clear()
+            return "<script>alert('Account permanently deleted successfully!'); window.location.href='/login';</script>"
+        else:
+            error = "❌ Invalid Username or Password!"
+        conn.close()
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Delete Account</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
+        <div class="bg-gray-900 border border-rose-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
+            <h2 class="text-base font-bold text-rose-500 mb-2 text-center">⚠️ Permanent Account Deletion</h2>
+            <p class="text-[11px] text-gray-400 mb-4 text-center">Once deleted, your account, all created teams, match statistics, and total coin balance will be permanently erased and cannot be recovered.</p>
+            {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
+            <form method="POST" class="space-y-3">
+                <input type="text" name="username" placeholder="Confirm Username..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <input type="password" name="password" placeholder="Confirm Password..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                <button type="submit" class="w-full bg-rose-600 py-3 rounded-xl font-bold text-xs shadow">Delete Account Permanently</button>
+            </form>
+            <a href="/" class="block text-center mt-4 text-xs text-indigo-400 font-bold">Cancel & Back to Home</a>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -118,6 +219,7 @@ def index():
             prize = request.form.get('prize')
             fee = request.form.get('fee')
             spots = request.form.get('spots')
+            t_limit = int(request.form.get('team_limit', 1))
             
             ranks = request.form.getlist('breakup_rank')
             amounts = request.form.getlist('breakup_amount')
@@ -127,8 +229,8 @@ def index():
                     breakup_parts.append(f"{r.strip()}:{a.strip()}")
             breakup_str = ", ".join(breakup_parts) if breakup_parts else "1: 100"
             
-            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s)', 
-                      (match_id, c_name, prize, fee, spots, breakup_str))
+            c.execute('INSERT INTO contests (match_id, name, prize_pool, entry_fee, spots, team_limit, prize_breakup) VALUES (%s, %s, %s, %s, %s, %s, %s)', 
+                      (match_id, c_name, prize, fee, spots, t_limit, breakup_str))
             conn.commit()
         elif action == 'update_status':
             match_id = request.form.get('match_id')
@@ -234,6 +336,8 @@ def index():
             <div class="flex gap-2 items-center">
                 <span class="bg-indigo-900 px-3 py-1 rounded-full text-xs font-bold">🪙 {user['coins']}</span>
                 <a href="/wallet" class="bg-amber-500 text-black px-2.5 py-1 rounded-xl font-bold text-xs">Share Coin</a>
+                <a href="/terms" class="bg-gray-800 px-2.5 py-1 rounded-xl font-bold text-xs">T&C</a>
+                <a href="/delete_account" class="bg-rose-900 text-rose-200 px-2 py-1 rounded-xl font-bold text-xs border border-rose-600" title="Delete Account">D</a>
                 <a href="/logout" class="bg-rose-600 px-2.5 py-1 rounded-xl font-bold text-xs">Logout</a>
             </div>
         </div>
@@ -361,6 +465,10 @@ def index():
                 <input type="number" name="prize" placeholder="Total Prize Pool" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
                 <input type="number" name="fee" placeholder="Entry Fee" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
                 <input type="number" name="spots" placeholder="Total Spots" required class="w-full bg-gray-800 p-2.5 rounded-xl mb-2 text-xs text-white">
+                <div class="mb-2">
+                    <label class="text-[11px] text-gray-400 block mb-1">Team Limit per User (e.g. 1, 2, 4)</label>
+                    <input type="number" name="team_limit" value="1" min="1" max="10" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+                </div>
                 
                 <label class="text-[11px] text-gray-400 block mb-1">Winning Breakup Table (Rank & Prize)</label>
                 <div class="bg-gray-800 p-2 rounded-xl mb-2">
@@ -430,15 +538,23 @@ def admin_match_detail(match_id):
                     c.execute('INSERT INTO players (match_id, name, team, role, points, is_lineup) VALUES (%s, %s, %s, %s, 0, %s)',
                               (match_id, p_name, p_team, p_role, is_lin))
             conn.commit()
-        elif action == 'edit_player':
-            pid = request.form.get('player_id')
-            p_name = request.form.get('name').strip()
-            p_team = request.form.get('team').strip()
-            p_role = request.form.get('role')
-            p_pts = float(request.form.get('points', 0))
-            is_lin = 1 if request.form.get('is_lineup') == 'on' else 0
-            c.execute('UPDATE players SET name = %s, team = %s, role = %s, points = %s, is_lineup = %s WHERE id = %s', 
-                      (p_name, p_team, p_role, p_pts, is_lin, pid))
+        elif action == 'edit_all_players':
+            p_ids = request.form.getlist('player_id')
+            names = request.form.getlist('name')
+            teams = request.form.getlist('team')
+            roles = request.form.getlist('role')
+            points = request.form.getlist('points')
+            lineups = request.form.getlist('lineup')
+            
+            for i in range(len(p_ids)):
+                pid = p_ids[i]
+                p_name = names[i].strip()
+                p_team = teams[i].strip()
+                p_role = roles[i]
+                p_pts = float(points[i] if points[i] else 0)
+                is_lin = 1 if str(i) in lineups else 0
+                c.execute('UPDATE players SET name = %s, team = %s, role = %s, points = %s, is_lineup = %s WHERE id = %s',
+                          (p_name, p_team, p_role, p_pts, is_lin, pid))
             conn.commit()
             
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
@@ -466,6 +582,30 @@ def admin_match_detail(match_id):
                 </select>
             </td>
             <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{i - start_serial}" class="w-4 h-4 accent-emerald-500"></td>
+        </tr>
+        """
+
+    edit_rows_html = ""
+    for idx, p in enumerate(players, 1):
+        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
+        checked_lineup = "checked" if p['is_lineup'] == 1 else ""
+        edit_rows_html += f"""
+        <tr class="border-b border-gray-800 text-xs">
+            <input type="hidden" name="player_id" value="{p['id']}">
+            <td class="p-2 text-center"><span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span></td>
+            <td class="p-2 font-bold text-amber-400">#{idx}</td>
+            <td class="p-2"><input type="text" name="name" value="{p['name']}" required class="w-full bg-gray-800 p-1 rounded text-white"></td>
+            <td class="p-2"><input type="text" name="team" value="{p['team']}" required class="w-16 bg-gray-800 p-1 rounded text-white text-center"></td>
+            <td class="p-2">
+                <select name="role" class="bg-gray-800 p-1 rounded text-white text-xs">
+                    <option value="Batsman" {"selected" if p['role']=='Batsman' else ""}>Bat</option>
+                    <option value="Bowler" {"selected" if p['role']=='Bowler' else ""}>Bowl</option>
+                    <option value="All-Rounder" {"selected" if p['role']=='All-Rounder' else ""}>All-R</option>
+                    <option value="WK" {"selected" if p['role']=='WK' else ""}>WK</option>
+                </select>
+            </td>
+            <td class="p-2"><input type="number" step="0.5" name="points" value="{p['points']}" class="w-16 bg-gray-800 p-1 rounded text-white text-center font-bold"></td>
+            <td class="p-2 text-center"><input type="checkbox" name="lineup" value="{idx-1}" {checked_lineup} class="w-4 h-4 accent-emerald-500"></td>
         </tr>
         """
     
@@ -497,7 +637,7 @@ def admin_match_detail(match_id):
         <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center text-xs">
             <div>
                 <span class="font-bold">{contest['name']}</span>
-                <p class="text-[11px] text-gray-400">Prize Pool: 🪙 {contest['prize_pool']} | Fee: 🪙 {contest['entry_fee']}</p>
+                <p class="text-[11px] text-gray-400">Prize Pool: 🪙 {contest['prize_pool']} | Fee: 🪙 {contest['entry_fee']} | Limit: {contest.get('team_limit', 1)}</p>
             </div>
             <div class="flex items-center gap-2">
                 <a href="/contest/{contest['id']}" class="bg-gray-800 px-3 py-1.5 rounded font-bold">Leaderboard</a>
@@ -533,45 +673,30 @@ def admin_match_detail(match_id):
             <button type="submit" class="w-full bg-emerald-600 py-2.5 rounded-xl font-bold text-xs shadow">Save Added Players</button>
         </form>
 
-        <h3 class="font-bold text-indigo-300 text-xs mb-2">👥 Saved Players List (Edit Name / Points / Lineup)</h3>
-        <div class="space-y-2 mb-4">
-    """
-    for idx, p in enumerate(players, 1):
-        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
-        checked_lineup = "checked" if p['is_lineup'] == 1 else ""
-        html += f"""
-        <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl text-xs space-y-2">
-            <form method="POST" class="flex flex-col gap-2">
-                <input type="hidden" name="action" value="edit_player">
-                <input type="hidden" name="player_id" value="{p['id']}">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2">
-                        <span class="text-amber-400 font-bold">#{idx}</span>
-                        <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
-                        <span class="font-bold">{p['name']} ({p['team']})</span>
-                    </div>
-                    <span class="font-bold text-emerald-400">{p['points']} pts</span>
-                </div>
-                <div class="flex gap-2 items-center pt-1 border-t border-gray-800">
-                    <input type="text" name="name" value="{p['name']}" required class="flex-1 bg-gray-800 p-1.5 rounded text-white text-xs" placeholder="Name">
-                    <input type="text" name="team" value="{p['team']}" required class="w-16 bg-gray-800 p-1.5 rounded text-white text-xs text-center" placeholder="Team">
-                    <select name="role" class="bg-gray-800 p-1.5 rounded text-white text-xs">
-                        <option value="Batsman" {"selected" if p['role']=='Batsman' else ""}>Bat</option>
-                        <option value="Bowler" {"selected" if p['role']=='Bowler' else ""}>Bowl</option>
-                        <option value="All-Rounder" {"selected" if p['role']=='All-Rounder' else ""}>All-R</option>
-                        <option value="WK" {"selected" if p['role']=='WK' else ""}>WK</option>
-                    </select>
-                    <input type="number" step="0.5" name="points" value="{p['points']}" class="w-16 bg-gray-800 p-1.5 rounded text-white text-xs text-center font-bold" placeholder="Pts">
-                    <label class="flex items-center gap-1 text-[10px]" title="Lineup Check">
-                        <input type="checkbox" name="is_lineup" {checked_lineup} class="w-4 h-4 accent-emerald-500"> 🟢
-                    </label>
-                    <button type="submit" class="bg-indigo-600 px-3 py-1.5 rounded font-bold text-xs">Save</button>
-                </div>
-            </form>
-        </div>
-        """
-    html += """
-        </div>
+        <h3 class="font-bold text-indigo-300 text-xs mb-2">👥 Saved Players List (Single Bulk Edit & Save)</h3>
+        <form method="POST">
+            <input type="hidden" name="action" value="edit_all_players">
+            <div class="bg-gray-900 border border-gray-800 rounded-2xl overflow-x-auto mb-4">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-800 text-[11px] text-amber-300">
+                            <th class="p-2 text-center">Status</th>
+                            <th class="p-2">#</th>
+                            <th class="p-2">Name</th>
+                            <th class="p-2">Team</th>
+                            <th class="p-2">Role</th>
+                            <th class="p-2">Pts</th>
+                            <th class="p-2 text-center">Lineup</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {edit_rows_html}
+                    </tbody>
+                </table>
+            </div>
+            <button type="submit" class="w-full bg-amber-600 py-3 rounded-xl font-bold text-xs shadow">Update All Players & Points</button>
+        </form>
+
         <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
     </body>
     </html>
@@ -709,7 +834,8 @@ def login():
     </head>
     <body class="bg-gray-950 text-white font-sans p-6 flex items-center justify-center h-screen">
         <div class="bg-gray-900 border border-gray-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl">
-            <h2 class="text-base font-bold text-indigo-400 mb-4 text-center">🏏 CRICXABHI Login</h2>
+            <h2 class="text-base font-bold text-indigo-400 mb-2 text-center">🏏 CRICXABHI Login</h2>
+            <div class="text-center mb-4"><a href="/terms" class="text-[11px] text-amber-400 underline font-bold">Read Terms & Conditions</a></div>
             {f'<div class="bg-rose-900 text-rose-200 p-2.5 rounded-xl mb-3 text-xs font-bold text-center">{error}</div>' if error else ''}
             <form method="POST" class="space-y-3">
                 <div>
@@ -876,18 +1002,11 @@ def match_detail(match_id):
     """
     
     if match['status'] == 'Upcoming':
-        if not my_teams:
-            html += f'''
-            <div class="mb-4">
-                <a href="/create_team/{match['id']}" class="block text-center bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">➕ Create Team</a>
-            </div>
-            '''
-        else:
-            html += f'''
-            <div class="mb-4">
-                <a href="/create_team/{match['id']}" class="block text-center bg-amber-600 py-3 rounded-xl font-bold text-xs shadow">✏️ Edit Team</a>
-            </div>
-            '''
+        html += f'''
+        <div class="mb-4">
+            <a href="/create_team/{match['id']}" class="block text-center bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">➕ Create / Edit Team (Max Limit Supported)</a>
+        </div>
+        '''
 
     html += '<div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4"><h3 class="font-bold text-indigo-300 text-xs mb-2">🔒 My Created Teams</h3>'
     if not my_teams:
@@ -896,7 +1015,7 @@ def match_detail(match_id):
         if match['status'] == 'Upcoming':
             team_action_btn = f'<a href="/create_team/{match_id}" class="text-[10px] bg-amber-500 text-black px-2 py-1 rounded font-bold">Edit</a>'
         else:
-            team_action_btn = f'<a href="/show_team/{t["id"]}" class="text-[10px] bg-emerald-500 text-black px-2.5 py-1 rounded font-bold">Show Your Team</a>'
+            team_action_btn = f'<a href="/show_team/{t["id"]}" class="text-[10px] bg-emerald-500 text-black px-2.5 py-1 rounded font-bold">Show Team</a>'
             
         html += f"""
         <div class="bg-gray-800 p-2.5 rounded-xl mb-2 text-xs border border-gray-700">
@@ -926,7 +1045,7 @@ def match_detail(match_id):
                 <a href="/contest/{contest['id']}" class="text-indigo-400 hover:underline"><span>{contest['name']}</span></a>
                 <span>Prize: 🪙 {contest['prize_pool']}</span>
             </div>
-            <p class="text-[11px] text-gray-400 mb-2">Entry Fee: 🪙 {contest['entry_fee']} | Spots: {contest['spots']}</p>
+            <p class="text-[11px] text-gray-400 mb-2">Entry: 🪙 {contest['entry_fee']} | Spots: {contest['spots']} | Limit: {contest.get('team_limit', 1)} Team(s)</p>
             <div class="flex gap-2">
                 <a href="/contest/{contest['id']}" class="flex-1 text-center bg-gray-800 py-2 rounded-xl font-bold text-xs">View Contest</a>
                 {join_btn}
@@ -952,6 +1071,9 @@ def create_team(match_id):
         
     c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
     players = c.fetchall()
+    c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s ORDER BY id ASC', (match_id, session['user_id']))
+    user_teams = c.fetchall()
+    conn.close()
     
     msg = ""
     if request.method == 'POST':
@@ -959,25 +1081,35 @@ def create_team(match_id):
         selected_players = request.form.getlist('players')
         captain = request.form.get('captain')
         vice_captain = request.form.get('vice_captain')
+        team_slot = int(request.form.get('team_slot', 1))
         
         if len(selected_players) != 11:
             msg = "❌ Aapko exact 11 khiladi select karne honge!"
         elif not captain or not vice_captain:
             msg = "❌ Captain aur Vice-Captain select karna zaroori hai!"
+        elif captain == vice_captain:
+            msg = "❌ Error: Captain and Vice-Captain cannot be the same player! Please choose different players like Dream11."
         else:
             p_str = ",".join(selected_players)
-            c.execute('SELECT * FROM teams WHERE match_id = %s AND user_id = %s', (match_id, session['user_id']))
-            existing_team = c.fetchone()
-            if existing_team:
+            conn = get_db_connection()
+            c = conn.cursor()
+            
+            # Check if team slot already exists
+            if len(user_teams) >= team_slot:
+                # Update existing team slot
+                t_id = user_teams[team_slot - 1]['id']
                 c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
-                          (team_name, captain, vice_captain, p_str, existing_team['id']))
+                          (f"{team_name} (T{team_slot})", captain, vice_captain, p_str, t_id))
             else:
+                # Insert new team slot
                 c.execute('INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players, total_points) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                          (match_id, session['user_id'], team_name, captain, vice_captain, p_str, 0.0))
+                          (match_id, session['user_id'], f"{team_name} (T{team_slot})", captain, vice_captain, p_str, 0.0))
             conn.commit()
             conn.close()
             return redirect(url_for('match_detail', match_id=match_id))
-    conn.close()
+    
+    # Pre-fill for slot 1 if exists
+    default_tname = user_teams[0]['team_name'].split(' (T')[0] if user_teams else ""
     
     html = f"""
     <!DOCTYPE html>
@@ -991,7 +1123,7 @@ def create_team(match_id):
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
             <a href="/match/{match_id}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">Create Team: {match['team1']} vs {match['team2']}</h1>
+            <h1 class="text-sm font-bold">Create Teams: {match['team1']} vs {match['team2']}</h1>
         </div>
     """
     if msg:
@@ -999,12 +1131,23 @@ def create_team(match_id):
     
     html += f"""
         <form method="POST" class="space-y-4">
-            <div>
-                <label class="text-xs text-gray-400 block mb-1">Team Name</label>
-                <input type="text" name="team_name" placeholder="Enter Team Name..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Team Base Name</label>
+                    <input type="text" name="team_name" value="{default_tname}" placeholder="Enter Team Name..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Select Team Slot</label>
+                    <select name="team_slot" class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white font-bold">
+                        <option value="1">Team 1</option>
+                        <option value="2">Team 2</option>
+                        <option value="3">Team 3</option>
+                        <option value="4">Team 4</option>
+                    </select>
+                </div>
             </div>
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
-                <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (🟢 = Playing Lineup)</h3>
+                <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (🟢 = Playing Lineup) - C & VC must be different!</h3>
     """
     for p in players:
         dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
@@ -1023,7 +1166,7 @@ def create_team(match_id):
         """
     html += """
             </div>
-            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Save Team</button>
+            <button type="submit" class="w-full bg-emerald-600 py-3 rounded-xl font-bold text-xs shadow">Save This Team Slot</button>
         </form>
     </body>
     </html>
@@ -1132,15 +1275,26 @@ def join_contest(contest_id):
         conn.close()
         return "<script>alert('Insufficient coins!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
     
-    if teams:
-        team_id = teams[0]['id']
-        c.execute('SELECT * FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
-        already = c.fetchone()
-        if not already:
-            c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (contest['entry_fee'], user['id']))
-            c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id, rank, winnings) VALUES (%s, %s, %s, %s, %s)',
-                      (contest_id, user['id'], team_id, 0, 0))
-            conn.commit()
+    if not teams:
+        conn.close()
+        return "<script>alert('Pehle apni team banayein!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
+
+    # Check how many teams user already joined in this contest vs team_limit
+    c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
+    joined_count = c.fetchone()['cnt']
+    t_limit = contest.get('team_limit', 1)
+
+    if joined_count >= t_limit:
+        conn.close()
+        return f"<script>alert('Team limit reached! You can only join up to {t_limit} team(s) in this contest.'); window.location.href='/match/{contest['match_id']}';</script>"
+
+    # Join with the next available team slot of the user
+    if joined_count < len(teams):
+        team_to_join = teams[joined_count]
+        c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (contest['entry_fee'], user['id']))
+        c.execute('INSERT INTO contest_participants (contest_id, user_id, team_id, rank, winnings) VALUES (%s, %s, %s, %s, %s)',
+                  (contest_id, user['id'], team_to_join['id'], 0, 0))
+        conn.commit()
     conn.close()
     return redirect(url_for('contest_detail', contest_id=contest_id))
 
@@ -1226,7 +1380,7 @@ def contest_detail(contest_id):
         <div id="tabPrizes" class="space-y-2">
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 text-xs flex justify-between">
                 <span>Prize Pool: <b>🪙 {contest['prize_pool']}</b></span>
-                <span>Spots: <b>{contest['spots']}</b></span>
+                <span>Spots: <b>{contest['spots']}</b> | Limit: <b>{contest.get('team_limit', 1)}</b></span>
             </div>
             {breakup_rows}
         </div>
