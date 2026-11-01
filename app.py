@@ -143,27 +143,34 @@ def delete_account():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
+    # Prevent admin deletion
+    if session.get('user_id') == 1 or session.get('is_admin'):
+        return "<script>alert('Admin account cannot be deleted!'); window.location.href='/';</script>"
+    
     error = ""
     if request.method == 'POST':
         uname = request.form.get('username', '').strip()
         pwd = request.form.get('password', '').strip()
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
-        u = c.fetchone()
-        
-        if u and u['username'] == uname and u['password'] == pwd:
-            uid = session['user_id']
-            c.execute('DELETE FROM contest_participants WHERE user_id = %s', (uid,))
-            c.execute('DELETE FROM teams WHERE user_id = %s', (uid,))
-            c.execute('DELETE FROM users WHERE id = %s', (uid,))
-            conn.commit()
-            conn.close()
-            session.clear()
-            return "<script>alert('Account permanently deleted successfully!'); window.location.href='/login';</script>"
+        if uname == 'AbhiAdmin':
+            error = "❌ Admin account cannot be deleted!"
         else:
-            error = "❌ Invalid Username or Password!"
-        conn.close()
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute('SELECT * FROM users WHERE id = %s', (session['user_id'],))
+            u = c.fetchone()
+            
+            if u and u['username'] == uname and u['password'] == pwd:
+                uid = session['user_id']
+                c.execute('DELETE FROM contest_participants WHERE user_id = %s', (uid,))
+                c.execute('DELETE FROM teams WHERE user_id = %s', (uid,))
+                c.execute('DELETE FROM users WHERE id = %s', (uid,))
+                conn.commit()
+                conn.close()
+                session.clear()
+                return "<script>alert('Account permanently deleted successfully!'); window.location.href='/login';</script>"
+            else:
+                error = "❌ Invalid Username or Password!"
+            conn.close()
 
     html = f"""
     <!DOCTYPE html>
@@ -447,7 +454,7 @@ def index():
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 flex justify-between items-center">
                 <div>
                     <h3 class="font-bold text-indigo-300 text-xs">3. User Data Management</h3>
-                    <p class="text-[10px] text-gray-400">View all users and add coins</p>
+                    <p class="text-[10px] text-gray-400">View all users, passwords, and manage coins (+ / -)</p>
                 </div>
                 <a href="/admin/users" class="bg-indigo-600 px-3 py-2 rounded-xl font-bold text-xs shadow">Show More →</a>
             </div>
@@ -947,12 +954,15 @@ def admin_users():
     c = conn.cursor()
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'add_user_coins':
-            target_user_id = request.form.get('target_user_id')
-            add_amt = float(request.form.get('add_amt', 0))
-            if add_amt != 0:
-                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (add_amt, target_user_id))
-                conn.commit()
+        target_user_id = request.form.get('target_user_id')
+        amt = float(request.form.get('amt', 0))
+        
+        if action == 'add_coins' and amt != 0:
+            c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (amt, target_user_id))
+            conn.commit()
+        elif action == 'deduct_coins' and amt != 0:
+            c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (amt, target_user_id))
+            conn.commit()
                 
     c.execute('SELECT * FROM users ORDER BY id ASC')
     all_users = c.fetchall()
@@ -970,23 +980,36 @@ def admin_users():
     <body class="bg-gray-950 text-white font-sans p-4 pb-20">
         <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
             <a href="/" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
-            <h1 class="text-sm font-bold">👥 User Data & Coin Management</h1>
+            <h1 class="text-sm font-bold">👥 User Data & Coin Management (+ / -)</h1>
         </div>
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2">
+        <div class="space-y-2">
     """
     for u in all_users:
         html += f"""
-        <div class="flex items-center justify-between bg-gray-800 p-3 rounded-xl text-xs border border-gray-700">
-            <div>
-                <span class="font-bold text-emerald-400">{u['username']}</span> 
-                <p class="text-gray-300 mt-0.5">Coins: 🪙 {u['coins']}</p>
+        <div class="bg-gray-900 border border-gray-800 p-3 rounded-xl text-xs space-y-2">
+            <div class="flex justify-between items-center">
+                <div>
+                    <span class="font-bold text-emerald-400 text-sm">{u['username']}</span>
+                    <p class="text-gray-400 text-[11px]">Password: <span class="text-amber-300">{u['password']}</span></p>
+                </div>
+                <div class="text-right">
+                    <span class="bg-indigo-950 text-indigo-300 px-2.5 py-1 rounded-full font-bold">🪙 {u['coins']}</span>
+                </div>
             </div>
-            <form method="POST" class="flex items-center gap-1">
-                <input type="hidden" name="action" value="add_user_coins">
-                <input type="hidden" name="target_user_id" value="{u['id']}">
-                <input type="number" name="add_amt" placeholder="Amt" required class="w-16 bg-gray-700 p-1.5 rounded text-xs text-white text-center">
-                <button type="submit" class="bg-emerald-600 px-3 py-1.5 rounded font-bold text-xs" title="Add Coins">➕</button>
-            </form>
+            <div class="flex gap-2 pt-2 border-t border-gray-800">
+                <form method="POST" class="flex items-center gap-1 flex-1">
+                    <input type="hidden" name="action" value="add_coins">
+                    <input type="hidden" name="target_user_id" value="{u['id']}">
+                    <input type="number" name="amt" placeholder="Add" min="1" required class="w-full bg-gray-800 p-1.5 rounded text-xs text-white text-center">
+                    <button type="submit" class="bg-emerald-600 px-3 py-1.5 rounded font-bold text-xs" title="Add Coins">➕</button>
+                </form>
+                <form method="POST" class="flex items-center gap-1 flex-1">
+                    <input type="hidden" name="action" value="deduct_coins">
+                    <input type="hidden" name="target_user_id" value="{u['id']}">
+                    <input type="number" name="amt" placeholder="Deduct" min="1" required class="w-full bg-gray-800 p-1.5 rounded text-xs text-white text-center">
+                    <button type="submit" class="bg-rose-600 px-3 py-1.5 rounded font-bold text-xs" title="Deduct Coins">➖</button>
+                </form>
+            </div>
         </div>
         """
     html += """
@@ -1081,7 +1104,9 @@ def register():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
-        if username and password:
+        if username.lower() == 'abhiadmin':
+            error = "❌ This username is reserved!"
+        elif username and password:
             conn = get_db_connection()
             c = conn.cursor()
             try:
@@ -1491,7 +1516,6 @@ def join_contest(contest_id):
         conn.close()
         return "<script>alert('Pehle apni team banayein!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
 
-    # Check if contest is already full
     c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s', (contest_id,))
     total_joined = c.fetchone()['cnt']
     if total_joined >= contest['spots']:
