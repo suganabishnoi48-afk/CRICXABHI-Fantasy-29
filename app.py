@@ -641,6 +641,7 @@ def admin_match_detail(match_id):
             </div>
             <div class="flex items-center gap-2">
                 <a href="/contest/{contest['id']}" class="bg-gray-800 px-3 py-1.5 rounded font-bold">Leaderboard</a>
+                <a href="/admin/edit_contest/{contest['id']}" class="bg-amber-500 text-black px-3 py-1.5 rounded font-bold" onclick="return prompt('Enter Admin Password to Edit Contest:') === '1234567890';">Edit</a>
                 <form action="/admin/delete_contest_permanently" method="POST" onsubmit="return prompt('Enter Admin Password to Delete Contest:') === '1234567890';">
                     <input type="hidden" name="contest_id" value="{contest['id']}">
                     <input type="hidden" name="match_id" value="{match['id']}">
@@ -698,6 +699,212 @@ def admin_match_detail(match_id):
         </form>
 
         <a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/admin/edit_contest/<int:contest_id>', methods=['GET', 'POST'])
+def edit_contest(contest_id):
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    if request.method == 'POST':
+        c_name = request.form.get('c_name')
+        prize = request.form.get('prize')
+        fee = request.form.get('fee')
+        spots = request.form.get('spots')
+        t_limit = int(request.form.get('team_limit', 1))
+        
+        ranks = request.form.getlist('breakup_rank')
+        amounts = request.form.getlist('breakup_amount')
+        breakup_parts = []
+        for r, a in zip(ranks, amounts):
+            if r.strip() and a.strip():
+                breakup_parts.append(f"{r.strip()}:{a.strip()}")
+        breakup_str = ", ".join(breakup_parts) if breakup_parts else "1: 100"
+        
+        c.execute('UPDATE contests SET name = %s, prize_pool = %s, entry_fee = %s, spots = %s, team_limit = %s, prize_breakup = %s WHERE id = %s',
+                  (c_name, prize, fee, spots, t_limit, breakup_str, contest_id))
+        conn.commit()
+        
+        c.execute('SELECT match_id FROM contests WHERE id = %s', (contest_id,))
+        m_id = c.fetchone()['match_id']
+        conn.close()
+        return redirect(url_for('admin_match_detail', match_id=m_id))
+        
+    c.execute('SELECT * FROM contests WHERE id = %s', (contest_id,))
+    contest = c.fetchone()
+    conn.close()
+    
+    # Pre-parse breakup for edit table
+    existing_breakup = {}
+    parts = contest['prize_breakup'].split(',')
+    for p_str in parts:
+        if ':' in p_str:
+            r_rng, amt = p_str.split(':')
+            existing_breakup[r_rng.strip()] = amt.strip()
+            
+    breakup_table_rows = ""
+    for r_label in ["1", "2", "3", "4", "5", "6", "7 - 106"]:
+        val = existing_breakup.get(r_label, "")
+        breakup_table_rows += f"""
+        <tr class="border-b border-gray-800 text-xs">
+            <td class="p-2"><input type="text" name="breakup_rank" value="{r_label}" class="w-full bg-gray-800 p-1 rounded text-white text-center"></td>
+            <td class="p-2"><input type="number" name="breakup_amount" value="{val}" placeholder="Coins / Prize" class="w-full bg-gray-800 p-1 rounded text-white"></td>
+        </tr>
+        """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Edit Contest</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="/admin/match/{contest['match_id']}" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">Edit Contest: {contest['name']}</h1>
+        </div>
+
+        <form method="POST" class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3">
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Contest Name</label>
+                <input type="text" name="c_name" value="{contest['name']}" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Total Prize Pool</label>
+                <input type="number" name="prize" value="{contest['prize_pool']}" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Entry Fee</label>
+                <input type="number" name="fee" value="{contest['entry_fee']}" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Total Spots</label>
+                <input type="number" name="spots" value="{contest['spots']}" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+            </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Team Limit per User</label>
+                <input type="number" name="team_limit" value="{contest.get('team_limit', 1)}" min="1" max="10" required class="w-full bg-gray-800 p-2.5 rounded-xl text-xs text-white">
+            </div>
+
+            <label class="text-xs text-gray-400 block mb-1">Winning Breakup Table (Rank & Prize)</label>
+            <div class="bg-gray-800 p-2 rounded-xl mb-2">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-[10px] text-indigo-300 border-b border-gray-700">
+                            <th class="p-1">Rank / Range</th>
+                            <th class="p-1">Prize (Coins)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {breakup_table_rows}
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="submit" class="w-full bg-amber-500 text-black py-3 rounded-xl font-bold text-xs shadow">Update Contest</button>
+        </form>
+    </body>
+    </html>
+    """
+    return render_template_string(html)
+
+@app.route('/admin/edit_team/<int:team_id>', methods=['GET', 'POST'])
+def admin_edit_team(team_id):
+    if not session.get('is_admin'):
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    if request.method == 'POST':
+        team_name = request.form.get('team_name', '').strip()
+        selected_players = request.form.getlist('players')
+        captain = request.form.get('captain')
+        vice_captain = request.form.get('vice_captain')
+        
+        if len(selected_players) != 11:
+            msg = "❌ Exact 11 players must be selected!"
+        elif not captain or not vice_captain:
+            msg = "❌ Captain and Vice-Captain are required!"
+        elif captain == vice_captain:
+            msg = "❌ Captain and Vice-Captain cannot be the same player!"
+        else:
+            p_str = ",".join(selected_players)
+            c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
+                      (team_name, captain, vice_captain, p_str, team_id))
+            conn.commit()
+            
+            # Find match_id or contest_id to redirect back
+            c.execute('SELECT match_id FROM teams WHERE id = %s', (team_id,))
+            m_id = c.fetchone()['match_id']
+            conn.close()
+            return f"<script>alert('Team updated successfully by Admin!'); window.location.href='/match/{m_id}';</script>"
+
+    c.execute('SELECT * FROM teams WHERE id = %s', (team_id,))
+    team = c.fetchone()
+    c.execute('SELECT * FROM matches WHERE id = %s', (team['match_id'],))
+    match = c.fetchone()
+    c.execute('SELECT * FROM players WHERE match_id = %s', (team['match_id'],))
+    players = c.fetchall()
+    conn.close()
+    
+    current_players = [p.strip() for p in team['players'].split(',')]
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Edit Team</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-950 text-white font-sans p-4 pb-20">
+        <div class="bg-indigo-600 p-3 rounded-xl flex items-center mb-4 shadow">
+            <a href="javascript:history.back()" class="mr-3 font-bold bg-indigo-700 px-2.5 py-1 rounded-lg text-xs">←</a>
+            <h1 class="text-sm font-bold">Admin Edit Team: {team['team_name']}</h1>
+        </div>
+
+        <form method="POST" class="space-y-4">
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Team Name</label>
+                <input type="text" name="team_name" value="{team['team_name']}" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
+            </div>
+            <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
+                <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (C & VC must be different)</h3>
+    """
+    for p in players:
+        dot_color = "bg-emerald-500" if p['is_lineup'] == 1 else "bg-rose-500"
+        checked_p = "checked" if p['name'] in current_players else ""
+        checked_c = "checked" if p['name'] == team['captain'] else ""
+        checked_vc = "checked" if p['name'] == team['vice_captain'] else ""
+        
+        html += f"""
+        <div class="flex items-center justify-between bg-gray-800 p-2 rounded-xl mb-2 text-xs">
+            <label class="flex items-center gap-2 cursor-pointer flex-1">
+                <span class="inline-block w-2.5 h-2.5 rounded-full {dot_color}"></span>
+                <input type="checkbox" name="players" value="{p['name']}" {checked_p} class="w-4 h-4 accent-indigo-600">
+                <span>{p['name']} ({p['team']}) - <span class="text-gray-400">{p['role']}</span></span>
+            </label>
+            <div class="flex gap-2">
+                <label class="text-[10px] bg-gray-700 px-2 py-1 rounded cursor-pointer"><input type="radio" name="captain" value="{p['name']}" {checked_c}> C</label>
+                <label class="text-[10px] bg-gray-700 px-2 py-1 rounded cursor-pointer"><input type="radio" name="vice_captain" value="{p['name']}" {checked_vc}> VC</label>
+            </div>
+        </div>
+        """
+    html += """
+            </div>
+            <button type="submit" class="w-full bg-amber-500 text-black py-3 rounded-xl font-bold text-xs shadow" onclick="return prompt('Enter Admin Password to Edit Team:') === '1234567890';">Save Updated Team (Admin Override)</button>
+        </form>
     </body>
     </html>
     """
@@ -1094,21 +1301,17 @@ def create_team(match_id):
             conn = get_db_connection()
             c = conn.cursor()
             
-            # Check if team slot already exists
             if len(user_teams) >= team_slot:
-                # Update existing team slot
                 t_id = user_teams[team_slot - 1]['id']
                 c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
                           (f"{team_name} (T{team_slot})", captain, vice_captain, p_str, t_id))
             else:
-                # Insert new team slot
                 c.execute('INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players, total_points) VALUES (%s, %s, %s, %s, %s, %s, %s)',
                           (match_id, session['user_id'], f"{team_name} (T{team_slot})", captain, vice_captain, p_str, 0.0))
             conn.commit()
             conn.close()
             return redirect(url_for('match_detail', match_id=match_id))
     
-    # Pre-fill for slot 1 if exists
     default_tname = user_teams[0]['team_name'].split(' (T')[0] if user_teams else ""
     
     html = f"""
@@ -1279,7 +1482,6 @@ def join_contest(contest_id):
         conn.close()
         return "<script>alert('Pehle apni team banayein!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
 
-    # Check how many teams user already joined in this contest vs team_limit
     c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
     joined_count = c.fetchone()['cnt']
     t_limit = contest.get('team_limit', 1)
@@ -1288,7 +1490,6 @@ def join_contest(contest_id):
         conn.close()
         return f"<script>alert('Team limit reached! You can only join up to {t_limit} team(s) in this contest.'); window.location.href='/match/{contest['match_id']}';</script>"
 
-    # Join with the next available team slot of the user
     if joined_count < len(teams):
         team_to_join = teams[joined_count]
         c.execute('UPDATE users SET coins = coins - %s WHERE id = %s', (contest['entry_fee'], user['id']))
@@ -1344,11 +1545,15 @@ def contest_detail(contest_id):
                 team_link_open = '<span class="text-gray-300 font-bold">'
                 team_link_close = '</span>'
 
+            admin_edit_btn = ""
+            if session.get('is_admin'):
+                admin_edit_btn = f' <a href="/admin/edit_team/{p["team_id"]}" class="bg-amber-500 text-black px-2 py-0.5 rounded font-bold text-[10px]">E</a>'
+
             leaderboard_rows += f"""
             <div class="flex justify-between items-center bg-gray-800 p-3 rounded-xl mb-2 text-xs border border-gray-700">
                 <div>
                     <span class="font-bold text-amber-400">#{p['rank'] if p['rank'] > 0 else idx}</span> 
-                    <span class="font-bold text-white">{p['username']}</span>
+                    <span class="font-bold text-white">{p['username']}</span>{admin_edit_btn}
                     <p class="text-[10px] text-gray-400">Team: {team_link_open}{p['team_name']}{team_link_close}{win_text}</p>
                 </div>
                 <div class="text-right font-bold text-emerald-400">
