@@ -740,7 +740,6 @@ def edit_contest(contest_id):
     contest = c.fetchone()
     conn.close()
     
-    # Pre-parse breakup for edit table
     existing_breakup = {}
     parts = contest['prize_breakup'].split(',')
     for p_str in parts:
@@ -843,7 +842,6 @@ def admin_edit_team(team_id):
                       (team_name, captain, vice_captain, p_str, team_id))
             conn.commit()
             
-            # Find match_id or contest_id to redirect back
             c.execute('SELECT match_id FROM teams WHERE id = %s', (team_id,))
             m_id = c.fetchone()['match_id']
             conn.close()
@@ -1239,10 +1237,20 @@ def match_detail(match_id):
     html += '</div>'
     
     html += '<h3 class="font-bold text-amber-400 text-xs mb-2">🏆 Contests</h3>'
+    conn2 = get_db_connection()
+    c2 = conn2.cursor()
     for contest in contests:
+        c2.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s', (contest['id'],))
+        joined_spots = c2.fetchone()['cnt']
+        spots_left = contest['spots'] - joined_spots
+        if spots_left < 0: spots_left = 0
+        
         join_btn = ""
         if match['status'] == 'Upcoming':
-            join_btn = f'<a href="/join_contest/{contest["id"]}" class="flex-1 text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs">Join Contest</a>'
+            if spots_left > 0:
+                join_btn = f'<a href="/join_contest/{contest["id"]}" class="flex-1 text-center bg-indigo-600 py-2 rounded-xl font-bold text-xs">Join Contest</a>'
+            else:
+                join_btn = '<span class="flex-1 text-center bg-rose-900 text-rose-200 py-2 rounded-xl font-bold text-xs">Contest Full</span>'
         else:
             join_btn = '<span class="flex-1 text-center bg-gray-700 text-gray-400 py-2 rounded-xl font-bold text-xs">Locked (Match Started)</span>'
             
@@ -1252,13 +1260,14 @@ def match_detail(match_id):
                 <a href="/contest/{contest['id']}" class="text-indigo-400 hover:underline"><span>{contest['name']}</span></a>
                 <span>Prize: 🪙 {contest['prize_pool']}</span>
             </div>
-            <p class="text-[11px] text-gray-400 mb-2">Entry: 🪙 {contest['entry_fee']} | Spots: {contest['spots']} | Limit: {contest.get('team_limit', 1)} Team(s)</p>
+            <p class="text-[11px] text-gray-400 mb-2">Entry: 🪙 {contest['entry_fee']} | Spots: {contest['spots']} (Left: <b class="text-amber-400">{spots_left}</b>) | Limit: {contest.get('team_limit', 1)} Team(s)</p>
             <div class="flex gap-2">
                 <a href="/contest/{contest['id']}" class="flex-1 text-center bg-gray-800 py-2 rounded-xl font-bold text-xs">View Contest</a>
                 {join_btn}
             </div>
         </div>
         """
+    conn2.close()
     html += '<a href="/" class="block text-center bg-gray-800 py-2.5 rounded-xl font-bold text-xs mt-4">Back to Home</a></body></html>'
     return render_template_string(html)
 
@@ -1482,6 +1491,13 @@ def join_contest(contest_id):
         conn.close()
         return "<script>alert('Pehle apni team banayein!'); window.location.href='/match/" + str(contest['match_id']) + "';</script>"
 
+    # Check if contest is already full
+    c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s', (contest_id,))
+    total_joined = c.fetchone()['cnt']
+    if total_joined >= contest['spots']:
+        conn.close()
+        return f"<script>alert('Contest is full! All spots are filled.'); window.location.href='/match/{contest['match_id']}';</script>"
+
     c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s AND user_id = %s', (contest_id, user['id']))
     joined_count = c.fetchone()['cnt']
     t_limit = contest.get('team_limit', 1)
@@ -1510,6 +1526,11 @@ def contest_detail(contest_id):
     c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
     match = c.fetchone()
     
+    c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s', (contest_id,))
+    joined_count = c.fetchone()['cnt']
+    spots_left = contest['spots'] - joined_count
+    if spots_left < 0: spots_left = 0
+
     c.execute('''SELECT cp.*, u.username, t.team_name, t.total_points, t.id as team_id FROM contest_participants cp
                  JOIN users u ON cp.user_id = u.id
                  JOIN teams t ON cp.team_id = t.id
@@ -1585,7 +1606,7 @@ def contest_detail(contest_id):
         <div id="tabPrizes" class="space-y-2">
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl mb-3 text-xs flex justify-between">
                 <span>Prize Pool: <b>🪙 {contest['prize_pool']}</b></span>
-                <span>Spots: <b>{contest['spots']}</b> | Limit: <b>{contest.get('team_limit', 1)}</b></span>
+                <span>Spots Left: <b class="text-amber-400">{spots_left} / {contest['spots']}</b></span>
             </div>
             {breakup_rows}
         </div>
