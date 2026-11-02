@@ -143,7 +143,6 @@ def delete_account():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    # Prevent admin deletion
     if session.get('user_id') == 1 or session.get('is_admin'):
         return "<script>alert('Admin account cannot be deleted!'); window.location.href='/';</script>"
     
@@ -245,81 +244,83 @@ def index():
             c.execute('UPDATE matches SET status = %s WHERE id = %s', (status, match_id))
             conn.commit()
             
-            if status == 'Completed':
-                c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
-                match_players = {p['name']: p['points'] for p in c.fetchall()}
+        # Recalculate team points on any status update or completion
+        c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
+        match_players = {p['name']: p['points'] for p in c.fetchall()}
+        
+        c.execute('SELECT * FROM teams WHERE match_id = %s', (match_id,))
+        match_teams = c.fetchall()
+        
+        for t in match_teams:
+            plist = t['players'].split(',')
+            t_pts = 0.0
+            for pname in plist:
+                pname_clean = pname.strip()
+                pbase = match_players.get(pname_clean, 0.0)
+                if pname_clean == t['captain']:
+                    t_pts += pbase * 2
+                elif pname_clean == t['vice_captain']:
+                    t_pts += pbase * 1.5
+                else:
+                    t_pts += pbase
+            c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
+        conn.commit()
+            
+        if status == 'Completed':
+            c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
+            match_contests = c.fetchall()
+            for con in match_contests:
+                c.execute('''SELECT cp.*, t.total_points FROM contest_participants cp
+                             JOIN teams t ON cp.team_id = t.id
+                             WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (con['id'],))
+                participants = c.fetchall()
                 
-                c.execute('SELECT * FROM teams WHERE match_id = %s', (match_id,))
-                match_teams = c.fetchall()
-                
-                for t in match_teams:
-                    plist = t['players'].split(',')
-                    t_pts = 0.0
-                    for pname in plist:
-                        pbase = match_players.get(pname.strip(), 0.0)
-                        if pname.strip() == t['captain']:
-                            t_pts += pbase * 2
-                        elif pname.strip() == t['vice_captain']:
-                            t_pts += pbase * 1.5
+                breakup_dict = {}
+                parts = con['prize_breakup'].split(',')
+                for p_str in parts:
+                    if ':' in p_str:
+                        r_range, amt = p_str.split(':')
+                        r_range = r_range.strip()
+                        try:
+                            amt_val = float(amt.strip())
+                        except:
+                            amt_val = 0.0
+                        
+                        if '-' in r_range:
+                            start_r, end_r = r_range.split('-')
+                            for r_num in range(int(start_r.strip()), int(end_r.strip()) + 1):
+                                breakup_dict[r_num] = amt_val
                         else:
-                            t_pts += pbase
-                    c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
-                conn.commit()
-                
-                c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
-                match_contests = c.fetchall()
-                for con in match_contests:
-                    c.execute('''SELECT cp.*, t.total_points FROM contest_participants cp
-                                 JOIN teams t ON cp.team_id = t.id
-                                 WHERE cp.contest_id = %s ORDER BY t.total_points DESC''', (con['id'],))
-                    participants = c.fetchall()
-                    
-                    breakup_dict = {}
-                    parts = con['prize_breakup'].split(',')
-                    for p_str in parts:
-                        if ':' in p_str:
-                            r_range, amt = p_str.split(':')
-                            r_range = r_range.strip()
-                            try:
-                                amt_val = float(amt.strip())
-                            except:
-                                amt_val = 0.0
-                            
-                            if '-' in r_range:
-                                start_r, end_r = r_range.split('-')
-                                for r_num in range(int(start_r.strip()), int(end_r.strip()) + 1):
-                                    breakup_dict[r_num] = amt_val
-                            else:
-                                breakup_dict[int(r_range)] = amt_val
+                            breakup_dict[int(r_range)] = amt_val
 
-                    i = 0
-                    n = len(participants)
-                    current_rank = 1
+                i = 0
+                n = len(participants)
+                current_rank = 1
+                
+                while i < n:
+                    j = i
+                    while j < n and participants[j]['total_points'] == participants[i]['total_points']:
+                        j += 1
                     
-                    while i < n:
-                        j = i
-                        while j < n and participants[j]['total_points'] == participants[i]['total_points']:
-                            j += 1
-                        
-                        group_size = j - i
-                        total_group_prize = 0.0
-                        for r_offset in range(group_size):
-                            r_to_check = current_rank + r_offset
-                            total_group_prize += breakup_dict.get(r_to_check, 0.0)
-                        
-                        share_prize = total_group_prize / group_size if group_size > 0 else 0.0
-                        
-                        for k in range(i, j):
-                            part = participants[k]
-                            winnings = share_prize
-                            rank = current_rank
-                            if winnings > 0:
-                                c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
-                            c.execute('UPDATE contest_participants SET rank = %s, winnings = %s WHERE id = %s', (rank, winnings, part['id']))
-                        
-                        current_rank += group_size
-                        i = j
-                    conn.commit()
+                    group_size = j - i
+                    total_group_prize = 0.0
+                    for r_offset in range(group_size):
+                        r_to_check = current_rank + r_offset
+                        total_group_prize += breakup_dict.get(r_to_check, 0.0)
+                    
+                    share_prize = total_group_prize / group_size if group_size > 0 else 0.0
+                    
+                    for k in range(i, j):
+                        part = participants[k]
+                        winnings = share_prize
+                        rank = current_rank
+                        if winnings > 0:
+                            c.execute('UPDATE users SET coins = coins + %s WHERE id = %s', (winnings, part['user_id']))
+                        c.execute('UPDATE contest_participants SET rank = %s, winnings = %s WHERE id = %s', (rank, winnings, part['id']))
+                    
+                    current_rank += group_size
+                    i = j
+                conn.commit()
 
     c.execute('SELECT * FROM matches')
     matches = c.fetchall()
@@ -562,6 +563,28 @@ def admin_match_detail(match_id):
                 is_lin = 1 if str(i) in lineups else 0
                 c.execute('UPDATE players SET name = %s, team = %s, role = %s, points = %s, is_lineup = %s WHERE id = %s',
                           (p_name, p_team, p_role, p_pts, is_lin, pid))
+            conn.commit()
+            
+            # Recalculate team points for this match immediately
+            c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
+            match_players = {p['name']: p['points'] for p in c.fetchall()}
+            
+            c.execute('SELECT * FROM teams WHERE match_id = %s', (match_id,))
+            match_teams = c.fetchall()
+            
+            for t in match_teams:
+                plist = t['players'].split(',')
+                t_pts = 0.0
+                for pname in plist:
+                    pname_clean = pname.strip()
+                    pbase = match_players.get(pname_clean, 0.0)
+                    if pname_clean == t['captain']:
+                        t_pts += pbase * 2
+                    elif pname_clean == t['vice_captain']:
+                        t_pts += pbase * 1.5
+                    else:
+                        t_pts += pbase
+                c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
             conn.commit()
             
     c.execute('SELECT * FROM matches WHERE id = %s', (match_id,))
@@ -832,7 +855,6 @@ def admin_edit_team(team_id):
     c = conn.cursor()
     
     if request.method == 'POST':
-        team_name = request.form.get('team_name', '').strip()
         selected_players = request.form.getlist('players')
         captain = request.form.get('captain')
         vice_captain = request.form.get('vice_captain')
@@ -845,14 +867,33 @@ def admin_edit_team(team_id):
             msg = "❌ Captain and Vice-Captain cannot be the same player!"
         else:
             p_str = ",".join(selected_players)
-            c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
-                      (team_name, captain, vice_captain, p_str, team_id))
+            c.execute('UPDATE teams SET captain = %s, vice_captain = %s, players = %s WHERE id = %s',
+                      (captain, vice_captain, p_str, team_id))
             conn.commit()
             
-            c.execute('SELECT match_id FROM teams WHERE id = %s', (team_id,))
-            m_id = c.fetchone()['match_id']
+            # Recalculate this team's total points immediately
+            c.execute('SELECT * FROM teams WHERE id = %s', (team_id,))
+            updated_team = c.fetchone()
+            c.execute('SELECT * FROM players WHERE match_id = %s', (updated_team['match_id'],))
+            match_players = {p['name']: p['points'] for p in c.fetchall()}
+            
+            plist = updated_team['players'].split(',')
+            t_pts = 0.0
+            for pname in plist:
+                pname_clean = pname.strip()
+                pbase = match_players.get(pname_clean, 0.0)
+                if pname_clean == updated_team['captain']:
+                    t_pts += pbase * 2
+                elif pname_clean == updated_team['vice_captain']:
+                    t_pts += pbase * 1.5
+                else:
+                    t_pts += pbase
+            c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, team_id))
+            conn.commit()
+            
+            m_id = updated_team['match_id']
             conn.close()
-            return f"<script>alert('Team updated successfully by Admin!'); window.location.href='/match/{m_id}';</script>"
+            return f"<script>alert('Team updated & points recalculated successfully by Admin!'); window.location.href='/match/{m_id}';</script>"
 
     c.execute('SELECT * FROM teams WHERE id = %s', (team_id,))
     team = c.fetchone()
@@ -880,10 +921,7 @@ def admin_edit_team(team_id):
         </div>
 
         <form method="POST" class="space-y-4">
-            <div>
-                <label class="text-xs text-gray-400 block mb-1">Team Name</label>
-                <input type="text" name="team_name" value="{team['team_name']}" required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-            </div>
+            <input type="hidden" name="team_name" value="{team['team_name']}">
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
                 <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (C & VC must be different)</h3>
     """
@@ -908,7 +946,7 @@ def admin_edit_team(team_id):
         """
     html += """
             </div>
-            <button type="submit" class="w-full bg-amber-500 text-black py-3 rounded-xl font-bold text-xs shadow" onclick="return prompt('Enter Admin Password to Edit Team:') === '1234567890';">Save Updated Team (Admin Override)</button>
+            <button type="submit" class="w-full bg-amber-500 text-black py-3 rounded-xl font-bold text-xs shadow" onclick="return prompt('Enter Admin Password to Edit Team:') === '1234567890';">Save Updated Team & Recalculate Points (Admin Override)</button>
         </form>
     </body>
     </html>
@@ -1318,7 +1356,6 @@ def create_team(match_id):
     
     msg = ""
     if request.method == 'POST':
-        team_name = request.form.get('team_name', '').strip()
         selected_players = request.form.getlist('players')
         captain = request.form.get('captain')
         vice_captain = request.form.get('vice_captain')
@@ -1335,18 +1372,17 @@ def create_team(match_id):
             conn = get_db_connection()
             c = conn.cursor()
             
+            t_name_slot = f"Team {team_slot}"
             if len(user_teams) >= team_slot:
                 t_id = user_teams[team_slot - 1]['id']
                 c.execute('UPDATE teams SET team_name = %s, captain = %s, vice_captain = %s, players = %s WHERE id = %s',
-                          (f"{team_name} (T{team_slot})", captain, vice_captain, p_str, t_id))
+                          (t_name_slot, captain, vice_captain, p_str, t_id))
             else:
                 c.execute('INSERT INTO teams (match_id, user_id, team_name, captain, vice_captain, players, total_points) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                          (match_id, session['user_id'], f"{team_name} (T{team_slot})", captain, vice_captain, p_str, 0.0))
+                          (match_id, session['user_id'], t_name_slot, captain, vice_captain, p_str, 0.0))
             conn.commit()
             conn.close()
             return redirect(url_for('match_detail', match_id=match_id))
-    
-    default_tname = user_teams[0]['team_name'].split(' (T')[0] if user_teams else ""
     
     html = f"""
     <!DOCTYPE html>
@@ -1368,20 +1404,14 @@ def create_team(match_id):
     
     html += f"""
         <form method="POST" class="space-y-4">
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Team Base Name</label>
-                    <input type="text" name="team_name" value="{default_tname}" placeholder="Enter Team Name..." required class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white">
-                </div>
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Select Team Slot</label>
-                    <select name="team_slot" class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white font-bold">
-                        <option value="1">Team 1</option>
-                        <option value="2">Team 2</option>
-                        <option value="3">Team 3</option>
-                        <option value="4">Team 4</option>
-                    </select>
-                </div>
+            <div>
+                <label class="text-xs text-gray-400 block mb-1">Select Team Slot</label>
+                <select name="team_slot" class="w-full bg-gray-800 border border-gray-700 p-2.5 rounded-xl text-xs text-white font-bold">
+                    <option value="1">Team 1</option>
+                    <option value="2">Team 2</option>
+                    <option value="3">Team 3</option>
+                    <option value="4">Team 4</option>
+                </select>
             </div>
             <div class="bg-gray-900 border border-gray-800 p-3 rounded-2xl">
                 <h3 class="font-bold text-xs text-amber-400 mb-2">Select 11 Players (🟢 = Playing Lineup) - C & VC must be different!</h3>
@@ -1426,6 +1456,19 @@ def show_team(team_id):
     
     players_list = team['players'].split(',')
     
+    # Calculate total points dynamically
+    calc_total_pts = 0.0
+    for pname in players_list:
+        pname_clean = pname.strip()
+        p_obj = match_players.get(pname_clean, {'team': '-', 'role': '-', 'points': 0.0, 'is_lineup': 0})
+        base_pts = p_obj['points']
+        if pname_clean == team['captain']:
+            calc_total_pts += base_pts * 2.0
+        elif pname_clean == team['vice_captain']:
+            calc_total_pts += base_pts * 1.5
+        else:
+            calc_total_pts += base_pts
+            
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -1444,7 +1487,7 @@ def show_team(team_id):
         <div class="bg-gray-900 border border-indigo-500 p-3 rounded-2xl mb-4 text-xs">
             <div class="flex justify-between font-bold text-emerald-400 mb-2">
                 <span>Match: {match['team1']} vs {match['team2']}</span>
-                <span>Total Points: {team['total_points']} pts</span>
+                <span>Total Points: {calc_total_pts} pts</span>
             </div>
             <p class="text-gray-300">⭐ Captain (2x): <b>{team['captain']}</b> | 🌟 Vice-Captain (1.5x): <b>{team['vice_captain']}</b></p>
         </div>
