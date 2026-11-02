@@ -244,29 +244,34 @@ def index():
             c.execute('UPDATE matches SET status = %s WHERE id = %s', (status, match_id))
             conn.commit()
             
-        # Recalculate team points on any status update or completion
-        c.execute('SELECT * FROM players WHERE match_id = %s', (match_id,))
-        match_players = {p['name']: p['points'] for p in c.fetchall()}
-        
-        c.execute('SELECT * FROM teams WHERE match_id = %s', (match_id,))
-        match_teams = c.fetchall()
-        
-        for t in match_teams:
-            plist = t['players'].split(',')
-            t_pts = 0.0
-            for pname in plist:
-                pname_clean = pname.strip()
-                pbase = match_players.get(pname_clean, 0.0)
-                if pname_clean == t['captain']:
-                    t_pts += pbase * 2
-                elif pname_clean == t['vice_captain']:
-                    t_pts += pbase * 1.5
-                else:
-                    t_pts += pbase
-            c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
-        conn.commit()
+        # Global recalculation of team points for all matches
+        c.execute('SELECT * FROM matches')
+        all_matches = c.fetchall()
+        for am in all_matches:
+            m_id = am['id']
+            c.execute('SELECT * FROM players WHERE match_id = %s', (m_id,))
+            match_players = {p['name']: p['points'] for p in c.fetchall()}
             
-        if status == 'Completed':
+            c.execute('SELECT * FROM teams WHERE match_id = %s', (m_id,))
+            match_teams = c.fetchall()
+            
+            for t in match_teams:
+                plist = t['players'].split(',')
+                t_pts = 0.0
+                for pname in plist:
+                    pname_clean = pname.strip()
+                    pbase = match_players.get(pname_clean, 0.0)
+                    if pname_clean == t['captain']:
+                        t_pts += pbase * 2
+                    elif pname_clean == t['vice_captain']:
+                        t_pts += pbase * 1.5
+                    else:
+                        t_pts += pbase
+                c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
+            conn.commit()
+            
+        if request.form.get('action') == 'update_status' and request.form.get('status') == 'Completed':
+            match_id = request.form.get('match_id')
             c.execute('SELECT * FROM contests WHERE match_id = %s', (match_id,))
             match_contests = c.fetchall()
             for con in match_contests:
@@ -871,7 +876,6 @@ def admin_edit_team(team_id):
                       (captain, vice_captain, p_str, team_id))
             conn.commit()
             
-            # Recalculate this team's total points immediately
             c.execute('SELECT * FROM teams WHERE id = %s', (team_id,))
             updated_team = c.fetchone()
             c.execute('SELECT * FROM players WHERE match_id = %s', (updated_team['match_id'],))
@@ -1456,7 +1460,6 @@ def show_team(team_id):
     
     players_list = team['players'].split(',')
     
-    # Calculate total points dynamically
     calc_total_pts = 0.0
     for pname in players_list:
         pname_clean = pname.strip()
@@ -1593,6 +1596,27 @@ def contest_detail(contest_id):
     c.execute('SELECT * FROM matches WHERE id = %s', (contest['match_id'],))
     match = c.fetchone()
     
+    # Recalculate and update team points dynamically before rendering leaderboard
+    c.execute('SELECT * FROM players WHERE match_id = %s', (match['id'],))
+    match_players = {p['name']: p['points'] for p in c.fetchall()}
+    
+    c.execute('SELECT * FROM teams WHERE match_id = %s', (match['id'],))
+    match_teams = c.fetchall()
+    for t in match_teams:
+        plist = t['players'].split(',')
+        t_pts = 0.0
+        for pname in plist:
+            pname_clean = pname.strip()
+            pbase = match_players.get(pname_clean, 0.0)
+            if pname_clean == t['captain']:
+                t_pts += pbase * 2.0
+            elif pname_clean == t['vice_captain']:
+                t_pts += pbase * 1.5
+            else:
+                t_pts += pbase
+        c.execute('UPDATE teams SET total_points = %s WHERE id = %s', (t_pts, t['id']))
+    conn.commit()
+
     c.execute('SELECT COUNT(*) as cnt FROM contest_participants WHERE contest_id = %s', (contest_id,))
     joined_count = c.fetchone()['cnt']
     spots_left = contest['spots'] - joined_count
